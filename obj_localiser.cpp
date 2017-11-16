@@ -31,7 +31,7 @@ using namespace cv;
 void readme();
 std::map<std::string,std::string> load_config(std::string filename);
 Rect bounding_box(Mat *img_cam, std::vector<KeyPoint> *keypoints);
-std::vector< std::vector<KeyPoint> > DBSCAN_keypoints(std::vector<KeyPoint> *keypoints, float eps, int minPts);
+std::vector< std::vector<KeyPoint> > DBSCAN_keypoints(std::vector<KeyPoint> *keypoints, float eps, int min_pts);
 std::vector<int> region_query(std::vector<KeyPoint> *keypoints, KeyPoint *keypoint, float eps);
 
 
@@ -128,9 +128,9 @@ int main( int argc, char** argv )
     }
 
     //-- cluster remaining unmatched keypoints
-    float eps = 35;
-    int minPts = 5;
-    std::vector< std::vector<KeyPoint> > point_clusters = DBSCAN_keypoints( &obj_keypts, eps, minPts );
+    float eps = atof(config_params.at("cluster_eps").c_str());;
+    int min_pts = atoi(config_params.at("cluster_min_pts").c_str());;
+    std::vector< std::vector<KeyPoint> > point_clusters = DBSCAN_keypoints( &obj_keypts, eps, min_pts );
 
 
     //-- Debug output
@@ -157,6 +157,10 @@ int main( int argc, char** argv )
 
     Mat img_cam_rgb = imread( config_params.at("img_cam"), CV_LOAD_IMAGE_COLOR ); // camera image in colour
 
+    std::string output_dir = config_params.at("output_dir").c_str();
+
+    std::string dataset_id = config_params.at("id").c_str();
+
     //-- Clustered KeyPoints image display output
     for (int i = 0; i < point_clusters.size(); i++)
     {
@@ -167,7 +171,9 @@ int main( int argc, char** argv )
 
         printf("Cluster:%d\tSize:%d\n", i, current_cluster_size);
 
-        if (current_cluster_size > 100)
+        int min_size = atoi(config_params.at("cluster_min_size").c_str());
+
+        if (current_cluster_size > min_size)
         {
 
             Rect ROI = bounding_box(&img_cam, &current_cluster);
@@ -182,6 +188,7 @@ int main( int argc, char** argv )
             oss << "Cluster:" << i;
             std::string title_text = oss.str();
             imshow( title_text, out_img_temp );
+            imwrite( output_dir+dataset_id+"_"+std::to_string(i)+".png", out_img_temp );
         }
     }
 
@@ -269,7 +276,7 @@ Rect bounding_box(Mat *img_cam, std::vector<KeyPoint> *keypoints)
  * @function DBSCAN_keypoints
  * @brief density-based spatial clustering of applications with noise
  */
-std::vector< std::vector<KeyPoint> > DBSCAN_keypoints(std::vector<KeyPoint> *keypoints, float eps, int minPts)
+std::vector< std::vector<KeyPoint> > DBSCAN_keypoints(std::vector<KeyPoint> *keypoints, float eps, int min_pts)
 {
     std::vector< std::vector<KeyPoint> > clusters;
     std::vector<bool> clustered;
@@ -299,7 +306,7 @@ std::vector< std::vector<KeyPoint> > DBSCAN_keypoints(std::vector<KeyPoint> *key
             //Mark P as visited
             visited[i] = true;
             neighbor_pts = region_query(keypoints, &keypoints->at(i), eps);
-            if(neighbor_pts.size() < minPts)
+            if(neighbor_pts.size() < min_pts)
                 //Mark P as Noise
                 noise.push_back(i);
             else
@@ -319,7 +326,7 @@ std::vector< std::vector<KeyPoint> > DBSCAN_keypoints(std::vector<KeyPoint> *key
                         //Mark P' as visited
                         visited[neighbor_pts[j]] = true;
                         neighbor_pts_ = region_query(keypoints,&keypoints->at(neighbor_pts[j]),eps);
-                        if(neighbor_pts_.size() >= minPts)
+                        if(neighbor_pts_.size() >= min_pts)
                         {
                             neighbor_pts.insert(neighbor_pts.end(),neighbor_pts_.begin(),neighbor_pts_.end());
                         }
