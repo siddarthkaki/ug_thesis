@@ -6,7 +6,7 @@
 
 #include "opencv2/opencv_modules.hpp"
 #include <stdio.h>
-
+#include <fstream>
 
 #ifndef HAVE_OPENCV_NONFREE
 
@@ -41,26 +41,29 @@ std::vector<int> region_query(std::vector<KeyPoint> *keypoints, KeyPoint *keypoi
  */
 int main( int argc, char** argv )
 {
-    if( argc != 4 )
+    if( argc != 2 )
     { readme(); return -1; }
 
     // read in config file
-    //std::map<std::string,std::string> config_params = load_config(argv[1]);
+    std::map<std::string,std::string> config_params = load_config(argv[1]);
+
+    //printf("%lu\n",config_params.size());
+    //printf("%s\n", config_params.at("img_cam").c_str());
 
     // read in images
-    Mat img_cam = imread( argv[1], CV_LOAD_IMAGE_GRAYSCALE ); // camera image
-    Mat img_map = imread( argv[2], CV_LOAD_IMAGE_GRAYSCALE ); // "map" image
+    Mat img_cam = imread( config_params.at("img_cam"), CV_LOAD_IMAGE_GRAYSCALE ); // camera image
+    Mat img_map = imread( config_params.at("img_map"), CV_LOAD_IMAGE_GRAYSCALE ); // "map" image
 
     if( !img_cam.data || !img_map.data )
     { printf(" --(!) Error reading images \n"); return -1; }
 
     // read in threshold for discriptor "distance" comparison
-    float threshold = atof (argv[3]);
+    float threshold = atof (config_params.at("feature_comparison_max_distance").c_str());
 
     //-- Step 1: Detect the keypoints using SURF/SIFT Detector
-    int minHessian = 400;
+    int min_hessian = atoi(config_params.at("min_hessian").c_str());
 
-    SurfFeatureDetector detector( minHessian );
+    SurfFeatureDetector detector( min_hessian );
 
     std::vector<KeyPoint> keypoints_cam, keypoints_map;
 
@@ -152,7 +155,7 @@ int main( int argc, char** argv )
         imshow( "All Keypoints", out_img_3 );
     }
 
-    Mat img_cam_rgb = imread( argv[1], CV_LOAD_IMAGE_COLOR ); // camera image in colour
+    Mat img_cam_rgb = imread( config_params.at("img_cam"), CV_LOAD_IMAGE_COLOR ); // camera image in colour
 
     //-- Clustered KeyPoints image display output
     for (int i = 0; i < point_clusters.size(); i++)
@@ -205,24 +208,33 @@ void readme()
  */
 std::map<std::string,std::string> load_config(std::string filename)
 {
-    std::ifstream input(filename); //The input stream
-    std::map<std::string,std::string> ans; //A map of key-value pairs in the file
-    while(input) //Keep on going as long as the file stream is good
+    std::ifstream input(filename.c_str()); // the input stream
+    std::map<std::string,std::string> out; // a map of key-value pairs in the file
+    while(input) // keep on going as long as the file stream is good
     {
-        std::string key; //The key
-        std::string value; //The value
-        std::getline(input, key, ':'); //Read up to the : delimiter into key
-        std::getline(input, value, '\n'); //Read up to the newline into value
-        std::string::size_type pos1 = value.find_first_of("\""); //Find the first quote in the value
-        std::string::size_type pos2 = value.find_last_of("\""); //Find the last quote in the value
-        if(pos1 != std::string::npos && pos2 != std::string::npos && pos2 > pos1) //Check if the found positions are all valid
+        std::string key; // the key
+        std::string value; // the value
+        std::getline(input, key, '='); // read up to the : delimiter into key
+        std::getline(input, value, '\n'); // read up to the newline into value
+        std::string::size_type pos1 = value.find_first_of("\""); // find the first quote in the value
+        std::string::size_type pos2 = value.find_last_of("\""); // find the last quote in the value
+        
+        value = value.substr(pos1+1,pos2-pos1-1); // take a substring of the part between the quotes
+        out[key] = value; // store the result in the map
+        /*
+        if(pos1 != std::string::npos && pos2 != std::string::npos && pos2 > pos1) // check if the found positions are all valid
         {
-            value = value.substr(pos1+1,pos2-pos1-1); //Take a substring of the part between the quotes
-            ans[key] = value; //Store the result in the map
+            value = value.substr(pos1+1,pos2-pos1-1); // take a substring of the part between the quotes
+            out[key] = value; // store the result in the map
         }
+        else
+        {
+            printf("invalid field\n");
+        }
+        */
     }
-    input.close(); //Close the file stream
-    return ans; //And return the result
+    input.close(); // close the file stream
+    return out; // and return the result
 }
 
 /**
@@ -231,7 +243,7 @@ std::map<std::string,std::string> load_config(std::string filename)
  */
 Rect bounding_box(Mat *img_cam, std::vector<KeyPoint> *keypoints)
 {
-    float min_x = img_cam->cols, max_x = 0, min_y = img_cam->rows, max_y = 0;
+    float min_x = img_cam->cols, max_x = 0.0, min_y = img_cam->rows, max_y = 0.0;
 
     for (int i = 0; i < keypoints->size(); i++)
     {
@@ -239,12 +251,16 @@ Rect bounding_box(Mat *img_cam, std::vector<KeyPoint> *keypoints)
         if (keypoints->at(i).pt.x > max_x) { max_x = keypoints->at(i).pt.x; }
         if (keypoints->at(i).pt.y < min_y) { min_y = keypoints->at(i).pt.y; }
         if (keypoints->at(i).pt.y > max_y) { max_y = keypoints->at(i).pt.y; }
-        //printf("TEST\n");
     }
 
-    //printf("%f\t%f\t%f\t%f\n", min_x, max_x, min_y, max_y);
+    /*
+    printf("Cols: %d\tRows:%d\n", img_cam->cols, img_cam->rows);
+    printf("%f\t%f\t%f\t%f\n", min_x, max_x, min_y, max_y);
+    printf("%f\t%f\t%f\t%f\n", min_x, min_y, fabs(max_x - min_x), fabs(max_y - min_y));
+    */
 
-    Rect ROI(min_x, min_y, abs(max_x - min_x), abs(max_y - min_y));
+
+    Rect ROI(min_x, min_y, fabs(max_x - min_x), fabs(max_y - min_y));
 
     return ROI;
 }
