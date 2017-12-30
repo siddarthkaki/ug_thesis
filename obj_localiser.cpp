@@ -58,10 +58,10 @@ int main( int argc, char** argv )
     { printf(" --(!) Error reading images \n"); return -1; }
 
     // read in threshold for discriptor "distance" comparison
-    float threshold = atof (config_params.at("feature_comparison_max_distance").c_str());
+    float threshold = atof( config_params.at("feature_comparison_max_distance").c_str() );
 
     //-- Step 1: Detect the keypoints using SURF/SIFT Detector
-    int min_hessian = atoi(config_params.at("min_hessian").c_str());
+    int min_hessian = atoi( config_params.at("min_hessian").c_str() );
 
     SurfFeatureDetector detector( min_hessian );
 
@@ -113,8 +113,8 @@ int main( int argc, char** argv )
     }
 
     //-- find matched keypoints
-    std::vector<KeyPoint> obj_keypts = keypoints_cam;
-    std::vector<KeyPoint> matched_keypts;
+    std::vector<KeyPoint> obj_keypts = keypoints_cam; // keypoints of changed object / umnatched keypoints
+    std::vector<KeyPoint> matched_keypts; // keypoints of matched objects
     //std::vector<Point2f> map_pts;
 
     for( int i = good_matches.size()-1; i >= 0; i-- )
@@ -140,7 +140,6 @@ int main( int argc, char** argv )
 
 
     //-- Image display output
-
     if(0)
     {
         Mat out_img_1, out_img_2, out_img_3;
@@ -154,6 +153,9 @@ int main( int argc, char** argv )
         drawKeypoints(img_cam, keypoints_cam, out_img_3, Scalar::all(-1), DrawMatchesFlags::DEFAULT);
         imshow( "All Keypoints", out_img_3 );
     }
+
+
+
 
     Mat img_cam_rgb = imread( config_params.at("img_cam"), CV_LOAD_IMAGE_COLOR ); // camera image in colour
 
@@ -171,15 +173,15 @@ int main( int argc, char** argv )
 
         printf("Cluster:%d\tSize:%d\n", i, current_cluster_size);
 
-        int min_size = atoi(config_params.at("cluster_min_size").c_str());
+        int min_size = atoi( config_params.at("cluster_min_size").c_str() );
 
         if (current_cluster_size > min_size)
         {
 
-            Rect ROI = bounding_box(&img_cam, &current_cluster);
+            Rect ROI = bounding_box( &img_cam, &current_cluster );
 
             //Mat img_cam_cropped = img_cam;
-            Mat img_cam_cropped = img_cam_rgb(ROI);
+            Mat img_cam_cropped = img_cam_rgb( ROI );
 
             Mat out_img_temp;
             drawKeypoints( img_cam_cropped, current_cluster, out_img_temp, Scalar::all(-1), DrawMatchesFlags::DEFAULT );
@@ -188,8 +190,20 @@ int main( int argc, char** argv )
             oss << "Cluster:" << i;
             std::string title_text = oss.str();
             imshow( title_text, out_img_temp );
-            imwrite( output_dir+dataset_id+"_"+std::to_string(i)+".png", out_img_temp );
+            imwrite( output_dir+dataset_id+"_"+std::to_string(i)+".jpg", out_img_temp );
         }
+    }
+
+    //-- Call TensorFlow
+    if(0)
+    {
+        std::string command_tf_env = "source ~/tensorflow/bin/activate";
+        std::string command_tf_dir = "cd ~/workspace/rnl/tf/tf_models/models/object_detection";
+        //std::string command_tf_run = "python3 ~/workspace/rnl/tf/tf_models/models/object_detection/object_classification.py " + dataset_id;
+        std::string command_tf_run = "python3 ~/workspace/rnl/tf/tf_models/models/object_detection/object_detection_tutorial.py";
+        //system(command_tf_env.c_str());
+        system(command_tf_dir.c_str());
+        system(command_tf_run.c_str());
     }
 
     waitKey(0);
@@ -206,7 +220,8 @@ int main( int argc, char** argv )
  * @function readme
  */
 void readme()
-{ printf(" Usage: ./obj_localiser <img_from_camera> <img_from_map>\n"); }
+{ //printf(" Usage: ./obj_localiser <img_from_camera> <img_from_map>\n");
+  printf(" Usage: ./obj_localiser <path_to_config_file>\n"); }
 
 /**
  * @function load_config
@@ -265,7 +280,6 @@ Rect bounding_box(Mat *img_cam, std::vector<KeyPoint> *keypoints)
     printf("%f\t%f\t%f\t%f\n", min_x, max_x, min_y, max_y);
     printf("%f\t%f\t%f\t%f\n", min_x, min_y, fabs(max_x - min_x), fabs(max_y - min_y));
     */
-
 
     Rect ROI(min_x, min_y, fabs(max_x - min_x), fabs(max_y - min_y));
 
