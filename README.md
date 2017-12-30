@@ -6,3 +6,6 @@
 OR
 
 `./compile.sh`
+
+### Usage
+ `./obj_localiser [path_to_config_file]`
