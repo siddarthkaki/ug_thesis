@@ -1,4 +1,4 @@
-function [ projected, valid ] = projectPoints( points, K, T, D, imageSize, sortPoints )
+function [ projected, valid ] = project_points( points, K, T, D, imageSize, sortPoints )
 %PROJECTPOINTS Projects 3d points onto a plane using a camera model.
 %   Applies a standard pin-point camera model with optional distortion
 %   parameters to the points.

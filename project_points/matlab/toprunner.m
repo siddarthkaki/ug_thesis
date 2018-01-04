@@ -6,14 +6,13 @@ close all
 clc
 
 %% open db connection
-db_file_id = '/home/siddarthkaki/workspace/brick_seal/database2.db';
-%db_file_id = '/home/siddarthkaki/workspace/projectPoints/database.db';
+db_file_id = fullfile(pwd, '../data/database2.db');
 db = com.almworks.sqlite4java.SQLiteConnection(java.io.File(db_file_id));
 db.open;
 
 %% read in 3D points
 
-pc_file_id = '~/workspace/brick_seal/sparse/0/points3D.txt';
+pc_file_id = fullfile(pwd, '../data/sparse/0/points3D.txt');
 
 num_points = linecount(pc_file_id) - 3;
 
@@ -93,7 +92,7 @@ tform(1:3,4) = position;
 dist = []; %[0.1,0.005];
 
 % project the points into image coordinates
-[projected, valid] = projectPoints(points, cam, tform, dist, image_size, true);
+[projected, valid] = project_points(points, cam, tform, dist, image_size, true);
 projected = projected(valid,:);
 
 % visualise the projection
