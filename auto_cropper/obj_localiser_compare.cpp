@@ -63,7 +63,7 @@ int main( int argc, char** argv )
     //-- Step 1: Detect the keypoints using SURF/SIFT Detector
     int min_hessian = atoi( config_params.at("min_hessian").c_str() );
 
-    SiftFeatureDetector detector( min_hessian );
+    SurfFeatureDetector detector( min_hessian );
 
     std::vector<KeyPoint> keypoints_cam, keypoints_map;
 
@@ -71,7 +71,7 @@ int main( int argc, char** argv )
     detector.detect( img_map, keypoints_map );
 
     //-- Step 2: Calculate descriptors (feature vectors)
-    SiftDescriptorExtractor extractor;
+    SurfDescriptorExtractor extractor;
 
     Mat descriptors_cam, descriptors_map;
 
@@ -100,7 +100,8 @@ int main( int argc, char** argv )
 
     //-- Draw only "good" matches (i.e. whose distance is less than 2*min_dist,
     //-- or a small arbitary value ( 0.02 ) in the event that min_dist is very
-    //-- small); radiusMatch can also be used here.
+    //-- small)
+    //-- PS.- radiusMatch can also be used here.
     std::vector<DMatch> good_matches;
     std::vector<DMatch>  bad_matches;
 
@@ -112,12 +113,15 @@ int main( int argc, char** argv )
     }
 
     //-- find matched keypoints
-    std::vector<KeyPoint> obj_keypts = keypoints_cam; // keypoints of changed object / unmatched keypoints
+    std::vector<KeyPoint> obj_keypts = keypoints_cam; // keypoints of changed object / umnatched keypoints
     std::vector<KeyPoint> matched_keypts; // keypoints of matched objects
     //std::vector<Point2f> map_pts;
 
     for( int i = good_matches.size()-1; i >= 0; i-- )
     {
+        //if (i < 50){ printf("%d\n", good_matches[i].queryIdx); }
+        
+        // TODO fix
         matched_keypts.push_back( keypoints_cam[ good_matches[i].queryIdx ] );
         obj_keypts.erase( obj_keypts.begin() + good_matches[i].queryIdx );
         //map_pts.push_back( keypoints_map[ good_matches[i].trainIdx ].pt );
@@ -136,7 +140,7 @@ int main( int argc, char** argv )
 
 
     //-- Image display output
-    if(1)
+    if(0)
     {
         Mat out_img_1, out_img_2, out_img_3;
 
