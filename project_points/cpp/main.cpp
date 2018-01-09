@@ -14,14 +14,23 @@
 #include <iterator>
 #include <map>
 #include <eigen3/Eigen/Dense>
-#include <sqlite3.h> 
+#include <sqlite3.h>
+#include "opencv2/core/core.hpp"
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/core/eigen.hpp>
+#include "opencv2/calib3d/calib3d.hpp"
+#include "opencv2/highgui/highgui.hpp"
+
+using namespace cv;
 
 using Eigen::MatrixXd;
+using Eigen::Matrix3d;
 using Eigen::MatrixXi;
+using Eigen::VectorXd;
 using Eigen::VectorXi;
+using Eigen::Vector3d;
 
 void readme();
-std::map<std::string,std::string> LoadConfig(std::string filename);
 unsigned LineCount(std::string filename);
 
 /**
@@ -158,7 +167,7 @@ int main( int argc, char** argv )
             mean_descriptor = curr_descriptors.colwise().mean();
             mean_descriptors.block<1,128>(i,0) = mean_descriptor;
             //if (i % 1000 == 0) { std::cout << mean_descriptor.transpose() << std::endl; }
-            if (i % 1000 == 0) { std::cout << "Completed point: " << i << std::endl; }
+            if (i % 5000 == 0) { std::cout << "Completed point: " << i << std::endl; }
         }
 
         //std::cout << mean_descriptors << std::endl;
@@ -166,7 +175,46 @@ int main( int argc, char** argv )
 
     rc = sqlite3_close(db);
 
-    //std::cout << pos_mat << std::endl;
+    //-- projection --/////////////////////////////////////////////////////////
+
+    // camera parameters
+    unsigned image_size_x = 1000, focal_length_x = 500, 
+             image_size_y = 1000, focal_length_y = 500,
+             skew = 0;
+
+    // camera intrinsics matrix
+    cv::Mat cam_mat = (Mat_<double>(3,3) <<  
+                               focal_length_x,           skew, image_size_x/2,
+                                            0, focal_length_y, image_size_y/2,
+                                            0,              0,              1);
+
+    // DCM for camera extrinsics
+    cv::Mat rot_mat = (Mat_<double>(3,3) <<
+                        1, 0, 0,
+                        0, 1, 0,
+                        0, 0, 1);
+    cv::Mat rvec;
+    Rodrigues(rot_mat, rvec);
+    
+    //std::cout << rvec << std::endl;
+
+    // translation vector for camera extrinsics   
+    cv::Mat tvec = (Mat_<double>(3,1) << -1, -4, 5);
+
+    // distortion cooefficients vector; no distortion
+    cv::Mat dist_coeffs;
+
+    // matrix for projected points
+    cv::Mat proj_pos;
+
+    // convert Eigen matrix of 3D point cloud to CV matrix
+    cv::Mat pos_mat_cv;
+    eigen2cv(pos_mat, pos_mat_cv);
+
+    // project 3D point cloud to 2D camera view
+    projectPoints(pos_mat_cv, rvec, tvec, cam_mat, dist_coeffs, proj_pos);
+
+    //std::cout << proj_pos << std::endl;
     //waitKey(0);
 
     // stop clock
