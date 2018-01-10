@@ -46,10 +46,10 @@ int main( int argc, char** argv )
     clock_t t;
     t = clock();
 
-    // read in points3D.txt file
+    // read in points3D.txt file name
     std::string points_file_id = argv[1];
 
-    // read in database file
+    // read in database file name
     std::string db_file_id = argv[2];
 
     // setup db connection
