@@ -233,8 +233,7 @@ int main( int argc, char** argv )
  * @function readme
  */
 void readme()
-{ //printf(" Usage: ./obj_localiser <img_from_camera> <img_from_map>\n");
-  printf(" ./main <path_to_points3D.txt> <path_to_database.db>\n"); }
+{ printf(" ./main <path_to_points3D.txt> <path_to_database.db>\n"); }
 
 /**
  * @function LineCount
