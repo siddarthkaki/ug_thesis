@@ -1,5 +1,6 @@
 #include "Reconstruction.h" 
 
+Reconstruction::Reconstruction() {}
 Reconstruction::Reconstruction( std::string points_id_arg, 
                                 std::string db_id_arg )
 {
@@ -126,23 +127,21 @@ void Reconstruction::Load()
     rc = sqlite3_close(db);
 }
 
-/*
 Reconstruction Reconstruction::Load(std::string file_name)
 {
     Reconstruction new_obj;
     std::ifstream ifs(file_name);
     boost::archive::text_iarchive ia(ifs);
-    ia >> new_obj;
+    ia & new_obj;
     return new_obj;
 }
 
-void Reconstruction::Save(Reconstruction recon_obj, std::string file_name)
+void Reconstruction::Save(std::string file_name, Reconstruction recon_obj)
 {
     std::ofstream ofs(file_name); // open file stream
     boost::archive::text_oarchive oa(ofs);
-    oa << recon_obj;
+    oa & recon_obj;
 }
-*/
 
 unsigned Reconstruction::LineCount(std::string filename)
 {

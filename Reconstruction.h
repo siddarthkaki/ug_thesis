@@ -14,6 +14,7 @@
 #include <sqlite3.h>
 #include <boost/archive/text_iarchive.hpp>
 #include <boost/archive/text_oarchive.hpp>
+#include <boost/serialization/vector.hpp>
 
 #include "Point3D.h"
 
@@ -23,13 +24,11 @@ using Eigen::MatrixXi;
 class Reconstruction 
 { 
     private:
-        /*
+        // allow serialization to access non-public data members
         friend class boost::serialization::access;
-        // When the class Archive corresponds to an output archive, the
-        // & operator is defined similar to <<.  Likewise, when the class Archive
-        // is a type of input archive the & operator is defined similar to >>.
-        template<class Archive>
-        void serialize(Archive & ar, const unsigned int version)
+
+        template<typename Archive>
+        void serialize(Archive& ar, const unsigned version)
         {
             ar & points_file_id;
             ar & db_file_id;
@@ -40,7 +39,7 @@ class Reconstruction
 
             ar & points;
         }
-        */
+
     public:
         std::string points_file_id;
         std::string db_file_id;
@@ -58,9 +57,31 @@ class Reconstruction
         unsigned LineCount( std::string filename );
 
         void Load();
-        // Reconstruction Load(std::string file_name);
-        // void Save(Reconstruction recon_obj, std::string file_name);
+        Reconstruction Load(std::string file_name);
+        void Save(std::string file_name, Reconstruction recon_obj);
 
 };
+/*
+namespace boost
+{
+    template<class Archive, typename _Scalar, int _Rows, int _Cols, int _Options, int _MaxRows, int _MaxCols>
+    inline void serialize
+    (
+        Archive & ar, 
+        Eigen::Matrix<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols> & t, 
+        const unsigned int file_version
+    ) 
+    {
+        size_t rows = t.rows(), cols = t.cols();
+        ar & rows;
+        ar & cols;
+        if( rows * cols != t.size() )
+        t.resize( rows, cols );
+
+        for(size_t i=0; i<t.size(); i++)
+        ar & t.data()[i];
+    }
+}
+*/
 
 #endif

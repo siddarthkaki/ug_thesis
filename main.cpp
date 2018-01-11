@@ -40,19 +40,44 @@ unsigned LineCount(std::string filename);
  */
 int main( int argc, char** argv )
 {
-    if( argc != 3 )
-    { readme(); return -1; }
-
     // start clock
     clock_t t;
     t = clock();
 
-    // new Reconstruction object
-    Reconstruction recon(argv[1], argv[2]);
+    Reconstruction recon;
 
-    // load data from points3D.txt and database.db
-    recon.Load();
-    //recon.Save(recon, "brick_seal_serial.txt");
+    // input is serialised file
+    if( argc == 2 ) 
+    {
+        recon = recon.Load(argv[1]);
+    }
+
+    // inputs are points3D.txt and database.db
+    else if( argc == 3 )
+    {
+        // new Reconstruction object
+        Reconstruction temp(argv[1], argv[2]);
+
+        recon = temp;
+
+        // load data from points3D.txt and database.db
+        recon.Load();
+    }
+
+    // inputs are points3D.txt, database.db, and file to save serialised data to
+    else if( argc == 4 )
+    {
+        // new Reconstruction object
+        Reconstruction temp(argv[1], argv[2]);
+
+        recon = temp;
+
+        // load data from points3D.txt and database.db
+        recon.Load();
+        recon.Save(argv[3], recon);
+    }
+
+    else { readme(); return -1; }
 
     //-- projection --/////////////////////////////////////////////////////////
 
@@ -112,7 +137,13 @@ int main( int argc, char** argv )
  * @function readme
  */
 void readme()
-{ printf(" ./main <path_to_points3D.txt> <path_to_database.db>\n"); }
+{
+    printf("Usage:\n");
+    printf(" ./main <path_to_points3D.txt> <path_to_database.db>\n");
+    printf(" ./main <path_to_points3D.txt> <path_to_database.db> <path_to_save_serialised_data.txt>\n");
+    printf(" ./main <path_to_load_serialised_data.txt>\n");
+
+}
 
 /**
  * @function LineCount

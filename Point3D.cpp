@@ -1,5 +1,6 @@
 #include "Point3D.h"
 
+Point3D::Point3D() {}
 Point3D::Point3D( unsigned id_arg,
                   double x_arg, double y_arg, double z_arg,
                   unsigned num_tracks_arg )
