@@ -21,22 +21,9 @@
 #include "opencv2/calib3d/calib3d.hpp"
 #include "opencv2/highgui/highgui.hpp"
 #include "Reconstruction.h"
-
-/*
-#ifndef HAVE_OPENCV_NONFREE
-
-int main(int, char**)
-{
-    printf("The sample requires nonfree module that is not available in your OpenCV distribution.\n");
-    return -1;
-}
-
-#else
-*/
-
-# include "opencv2/features2d/features2d.hpp"
-# include "opencv2/nonfree/nonfree.hpp"
-# include "opencv2/nonfree/features2d.hpp"
+#include "opencv2/features2d/features2d.hpp"
+#include "opencv2/nonfree/nonfree.hpp"
+#include "opencv2/nonfree/features2d.hpp"
 
 using namespace cv;
 
@@ -63,15 +50,17 @@ int main( int argc, char** argv )
     clock_t t;
     t = clock();
 
+    //-- loading data --///////////////////////////////////////////////////////
+
     Reconstruction recon;
 
-    // input is serialised file
+    // input: serialised file
     if( argc == 2 ) 
     {
         recon = recon.Load(argv[1]);
     }
 
-    // inputs are points3D.txt and database.db
+    // inputs: points3D.txt and database.db
     else if( argc == 3 )
     {
         // new Reconstruction object
@@ -83,7 +72,7 @@ int main( int argc, char** argv )
         recon.Load();
     }
 
-    // inputs are points3D.txt, database.db, and file to save serialised data to
+    // inputs: points3D.txt, database.db, and file to save serialised data to
     else if( argc == 4 )
     {
         // new Reconstruction object
@@ -120,6 +109,9 @@ int main( int argc, char** argv )
                                             0, focal_length_y, image_size_y/2,
                                             0,              0,              1);
 
+    // IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME
+    // 1 0.0463085 0.0926584 0.817966 0.565863 -0.743449 -3.23341 7.8009 1 frame00038.jpg
+
     // DCM for camera extrinsics
     cv::Mat rot_mat = (Mat_<double>(3,3) <<
                         1, 0, 0,
@@ -131,7 +123,7 @@ int main( int argc, char** argv )
     //std::cout << rvec << std::endl;
 
     // translation vector for camera extrinsics   
-    cv::Mat tvec = (Mat_<double>(3,1) << -1, -4, 5);
+    cv::Mat tvec = (Mat_<double>(3,1) << -0.743449, -3.23341, 7.8009);
 
     // distortion cooefficients vector; no distortion
     cv::Mat dist_coeffs;
@@ -147,8 +139,6 @@ int main( int argc, char** argv )
     projectPoints(pos_mat_cv, rvec, tvec, cam_mat, dist_coeffs, proj_pos);
 
     //std::cout << proj_pos << std::endl;
-    //waitKey(0);
-
 
     // stop clock
     t = clock() - t;
@@ -160,14 +150,13 @@ int main( int argc, char** argv )
     // start clock
     t = clock();
 
-    // read in config file
-    std::map<std::string,std::string> config_params = load_config("config/airsim_set2_sift.ini");
+    // read in config file - TODO read from command argument
+    std::map<std::string,std::string> config_params = load_config("config/brickseal1.ini");
 
-    // read in image to compare
-    cv::Mat img_cam = imread( config_params.at("img_cam"), CV_LOAD_IMAGE_GRAYSCALE ); // camera image
+    // read in camera image to compare to map
+    cv::Mat img_cam = imread( config_params.at("img_cam"), CV_LOAD_IMAGE_GRAYSCALE );
 
-    if( !img_cam.data )
-    { printf(" --(!) Error reading image \n"); return -1; }
+    if( !img_cam.data ) { printf(" --(!) Error reading image \n"); return -1; }
 
     // read in threshold for discriptor "distance" comparison
     float threshold = atof( config_params.at("feature_comparison_max_distance").c_str() );
@@ -196,20 +185,20 @@ int main( int argc, char** argv )
     std::cout << "Cam SIFT Size: " << descriptors_cam.size() << std::endl;
     std::cout << "Map SIFT Size: " << descriptors_map.size() << std::endl;
 
+    // convert descriptor matrices to CV_32F format if needed
     if( descriptors_cam.type() != CV_32F )
     { descriptors_cam.convertTo(descriptors_cam, CV_32F); }
-
     if( descriptors_map.type() != CV_32F )
     { descriptors_map.convertTo(descriptors_map, CV_32F); }
 
-    //-- Step 3: Matching descriptor vectors using FLANN matcher
+    //-- Step 3: Matching camera and map descriptors using FLANN matcher
     FlannBasedMatcher matcher;
     std::vector< DMatch > matches;
     matcher.match( descriptors_cam, descriptors_map, matches );
 
     double max_dist = 0; double min_dist = 100;
 
-    //-- Compute the maximum and minimum distances between matched keypoints
+    //-- compute the maximum and minimum distances between matched keypoints
     for( int i = 0; i < descriptors_cam.rows; i++ )
     {
         double dist = matches[i].distance;
@@ -237,31 +226,26 @@ int main( int argc, char** argv )
     //-- find matched keypoints
     std::vector<KeyPoint> obj_keypts = keypoints_cam; // keypoints of changed object / umnatched keypoints
     std::vector<KeyPoint> matched_keypts; // keypoints of matched objects
-    //std::vector<Point2f> map_pts;
 
     for( int i = good_matches.size()-1; i >= 0; i-- )
     {
-        //if (i < 50){ printf("%d\n", good_matches[i].queryIdx); }
-        
-        // TODO fix
         matched_keypts.push_back( keypoints_cam[ good_matches[i].queryIdx ] );
         obj_keypts.erase( obj_keypts.begin() + good_matches[i].queryIdx );
-        //map_pts.push_back( keypoints_map[ good_matches[i].trainIdx ].pt );
     }
 
     //-- cluster remaining unmatched keypoints
-    float eps = atof(config_params.at("cluster_eps").c_str());;
-    int min_pts = atoi(config_params.at("cluster_min_pts").c_str());;
+    float eps = atof( config_params.at("cluster_eps").c_str() );;
+    int min_pts = atoi( config_params.at("cluster_min_pts").c_str() );
     std::vector< std::vector<KeyPoint> > point_clusters = DBSCAN_keypoints( &obj_keypts, eps, min_pts );
 
 
-    //-- Debug output
+    //-- debug output
     printf("\n----Total Keypoints : %lu\n", keypoints_cam.size());
     printf("--Matched Keypoints : %lu\n", matched_keypts.size());
     printf("---Object Keypoints : %lu\n\n", obj_keypts.size());
 
 
-    //-- Image display output
+    //-- image display output
     if(1)
     {
         Mat out_img_1, out_img_2, out_img_3;
@@ -324,7 +308,6 @@ int main( int argc, char** argv )
     return 0;
 }
 
-//#endif
 
 
 /******************************** FUNCTIONS **********************************/
