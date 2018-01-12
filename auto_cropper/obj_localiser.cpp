@@ -7,6 +7,7 @@
 #include "opencv2/opencv_modules.hpp"
 #include <stdio.h>
 #include <fstream>
+#include <iostream>
 
 #ifndef HAVE_OPENCV_NONFREE
 
@@ -70,6 +71,9 @@ int main( int argc, char** argv )
     detector.detect( img_cam, keypoints_cam );
     detector.detect( img_map, keypoints_map );
 
+    std::cout << "Map Num KeyPoints: " << keypoints_cam.size() << std::endl;
+    std::cout << "Cam Num KeyPoints: " << keypoints_map.size() << std::endl;
+
     //-- Step 2: Calculate descriptors (feature vectors)
     SiftDescriptorExtractor extractor;
 
@@ -77,6 +81,9 @@ int main( int argc, char** argv )
 
     extractor.compute( img_cam, keypoints_cam, descriptors_cam );
     extractor.compute( img_map, keypoints_map, descriptors_map );
+
+    std::cout << "Map SIFT Size: " << descriptors_map.size() << std::endl;
+    std::cout << "Cam SIFT Size: " << descriptors_cam.size() << std::endl;
 
     //printf("%d\t%d\n", descriptors_cam.rows, descriptors_cam.cols );
 
