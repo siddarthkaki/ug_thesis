@@ -5,6 +5,7 @@
  */
 
 #include <stdio.h>
+#include <math.h>
 #include <time.h>
 #include <fstream>
 #include <iterator>
@@ -24,6 +25,14 @@
 #include "opencv2/features2d/features2d.hpp"
 #include "opencv2/nonfree/nonfree.hpp"
 #include "opencv2/nonfree/features2d.hpp"
+//#include "opencv2/xfeatures2d/nonfree.hpp"
+
+extern "C"
+{  
+    #include <vl/generic.h>
+    #include <vl/sift.h>
+    #include <vl/dsift.h>
+}
 
 using namespace cv;
 
@@ -35,10 +44,12 @@ using Eigen::VectorXi;
 using Eigen::Vector3d;
 
 void readme();
-std::map<std::string,std::string> load_config(std::string filename);
-Rect bounding_box(Mat *img_cam, std::vector<KeyPoint> *keypoints);
+std::map<std::string,std::string> LoadConfig(std::string filename);
+Rect BoundingBox(Mat *img_cam, std::vector<KeyPoint> *keypoints);
 std::vector< std::vector<KeyPoint> > DBSCAN_keypoints(std::vector<KeyPoint> *keypoints, float eps, int min_pts);
-std::vector<int> region_query(std::vector<KeyPoint> *keypoints, KeyPoint *keypoint, float eps);
+std::vector<int> RegionQuery(std::vector<KeyPoint> *keypoints, KeyPoint *keypoint, float eps);
+cv::Mat1f VLFeatSiftFeatures(cv::Mat img_cam);
+void ColmapSiftFeatures(cv::Mat img_cam);
 
 /**
  * @function main
@@ -151,7 +162,7 @@ int main( int argc, char** argv )
     t = clock();
 
     // read in config file - TODO read from command argument
-    std::map<std::string,std::string> config_params = load_config("config/brickseal1.ini");
+    std::map<std::string,std::string> config_params = LoadConfig("config/brickseal1.ini");
 
     // read in camera image to compare to map
     cv::Mat img_cam = imread( config_params.at("img_cam"), CV_LOAD_IMAGE_GRAYSCALE );
@@ -181,22 +192,32 @@ int main( int argc, char** argv )
     // convert Eigen matrix of mean descriptors to CV matrix
     cv::Mat descriptors_map;
     eigen2cv(recon.mean_descriptors, descriptors_map);
+    //eigen2cv(recon.all_descriptors, descriptors_map);
+    cv::Mat vlf_descriptors_map = VLFeatSiftFeatures(img_cam);
 
-    std::cout << "Cam SIFT Size: " << descriptors_cam.size() << std::endl;
-    std::cout << "Map SIFT Size: " << descriptors_map.size() << std::endl;
+    std::cout << "    Cam SIFT Size: " << descriptors_cam.size() << std::endl;
+    std::cout << " CV Map SIFT Size: " << descriptors_map.size() << std::endl;
+    std::cout << "VLF Map SIFT Size: " << vlf_descriptors_map.size() << std::endl;
+
+
+    //std::cout << "Cam Descriptors:\n" << descriptors_cam << std::endl;
+    //std::cout << "Map Descriptors:\n" << descriptors_map << std::endl;
 
     // convert descriptor matrices to CV_32F format if needed
     if( descriptors_cam.type() != CV_32F )
     { descriptors_cam.convertTo(descriptors_cam, CV_32F); }
     if( descriptors_map.type() != CV_32F )
     { descriptors_map.convertTo(descriptors_map, CV_32F); }
+    if( vlf_descriptors_map.type() != CV_32F )
+    { vlf_descriptors_map.convertTo(vlf_descriptors_map, CV_32F); }
 
     //-- Step 3: Matching camera and map descriptors using FLANN matcher
     FlannBasedMatcher matcher;
+    //BFMatcher matcher(NORM_L2);
     std::vector< DMatch > matches;
-    matcher.match( descriptors_cam, descriptors_map, matches );
+    matcher.match( descriptors_cam, vlf_descriptors_map, matches );
 
-    double max_dist = 0; double min_dist = 100;
+    double max_dist = 0; double min_dist = 1000;
 
     //-- compute the maximum and minimum distances between matched keypoints
     for( int i = 0; i < descriptors_cam.rows; i++ )
@@ -284,7 +305,7 @@ int main( int argc, char** argv )
         if (current_cluster_size > min_size)
         {
 
-            Rect ROI = bounding_box( &img_cam, &current_cluster );
+            Rect ROI = BoundingBox( &img_cam, &current_cluster );
 
             //Mat img_cam_cropped = img_cam;
             Mat img_cam_cropped = img_cam_rgb( ROI );
@@ -325,11 +346,11 @@ void readme()
 }
 
 /**
- * @function load_config
+ * @function LoadConfig
  * @brief loads config params from ini file
  * @return map of key-value pairs
  */
-std::map<std::string,std::string> load_config(std::string filename)
+std::map<std::string,std::string> LoadConfig(std::string filename)
 {
     std::ifstream input(filename.c_str()); // the input stream
     std::map<std::string,std::string> out; // a map of key-value pairs in the file
@@ -361,10 +382,10 @@ std::map<std::string,std::string> load_config(std::string filename)
 }
 
 /**
- * @function bounding_box
+ * @function BoundingBox
  * @brief provides bounding box corners for a set of keypoints
  */
-Rect bounding_box(Mat *img_cam, std::vector<KeyPoint> *keypoints)
+Rect BoundingBox(Mat *img_cam, std::vector<KeyPoint> *keypoints)
 {
     float min_x = img_cam->cols, max_x = 0.0, min_y = img_cam->rows, max_y = 0.0;
 
@@ -420,7 +441,7 @@ std::vector< std::vector<KeyPoint> > DBSCAN_keypoints(std::vector<KeyPoint> *key
         {
             //Mark P as visited
             visited[i] = true;
-            neighbor_pts = region_query(keypoints, &keypoints->at(i), eps);
+            neighbor_pts = RegionQuery(keypoints, &keypoints->at(i), eps);
             if(neighbor_pts.size() < min_pts)
                 //Mark P as Noise
                 noise.push_back(i);
@@ -440,7 +461,7 @@ std::vector< std::vector<KeyPoint> > DBSCAN_keypoints(std::vector<KeyPoint> *key
                     {
                         //Mark P' as visited
                         visited[neighbor_pts[j]] = true;
-                        neighbor_pts_ = region_query(keypoints,&keypoints->at(neighbor_pts[j]),eps);
+                        neighbor_pts_ = RegionQuery(keypoints,&keypoints->at(neighbor_pts[j]),eps);
                         if(neighbor_pts_.size() >= min_pts)
                         {
                             neighbor_pts.insert(neighbor_pts.end(),neighbor_pts_.begin(),neighbor_pts_.end());
@@ -461,10 +482,10 @@ std::vector< std::vector<KeyPoint> > DBSCAN_keypoints(std::vector<KeyPoint> *key
 }
 
 /**
- * @function region_query
+ * @function RegionQuery
  * @brief searching for closest keypoints to keypoint in question
  */
-vector<int> region_query(std::vector<KeyPoint> *keypoints, KeyPoint *keypoint, float eps)
+vector<int> RegionQuery(std::vector<KeyPoint> *keypoints, KeyPoint *keypoint, float eps)
 {
     float dist;
     vector<int> ret_keys;
@@ -477,4 +498,242 @@ vector<int> region_query(std::vector<KeyPoint> *keypoints, KeyPoint *keypoint, f
         }
     }
     return ret_keys;
+}
+
+/**
+ * @function VLFeatSiftFeatures
+ * @brief VLFeat implementation of SIFT feature extraction
+ */
+cv::Mat1f VLFeatSiftFeatures(cv::Mat img_cam)
+{
+    unsigned width  = img_cam.cols;
+    unsigned height = img_cam.rows;
+
+    // create filter
+    VlDsiftFilter* vlf = vl_dsift_new_basic(width, height, 1, 3);
+    //VlDsiftFilter* vlf = vl_dsift_new(width, height);
+    //VlSiftFilt* vlf = vl_sift_new (width, height, 3, 5, 0) ;
+
+    
+    // transform image in cv::Mat to float vector
+    cv::Mat img_cam_float;
+    img_cam.convertTo(img_cam_float, CV_32F, 1.0/255.0);
+    // std::vector<float> img_vec;
+    /*for (int i = 0; i < height; ++i)
+    {
+        for (int j = 0; j < width; ++j)
+        {
+            img_vec.push_back(img_cam.at<unsigned char>(i,j) / 255.0f);                                                                                                                                                                                                        
+        }
+    }*/
+
+    // call processing function of vl
+    vl_dsift_process(vlf, img_cam_float.ptr<float>());
+
+    // echo number of keypoints found
+    //std::cout << "VLFeat Num Des: " << vl_dsift_get_keypoint_num(vlf) << std::endl;
+
+    // Extract keypoints
+    const VlDsiftKeypoint* vlkeypoints = vl_dsift_get_keypoints(vlf);
+
+    // Extract descriptors
+    // const float* vldescriptors = vl_dsift_get_descriptors(vlf);
+
+    cv::Mat1f descriptors;
+    cv::Mat scaleDescs(vl_dsift_get_keypoint_num(vlf), 128, CV_32F, (void*) vl_dsift_get_descriptors(vlf));
+    descriptors.push_back(scaleDescs);
+
+    return descriptors;
+}
+
+/**
+ * @function ColmapSiftFeatures
+ * @brief VLFeat implementation of SIFT feature extraction; from COLMAP; todo citation
+ */
+void ColmapSiftFeatures(cv::Mat img_cam)
+{
+    /*
+    float width, height = img_cam.cols, img_cam.rows;
+    
+    // Setup SIFT extractor.
+    std::unique_ptr<VlSiftFilt, void (*)(VlSiftFilt*)> sift(
+        vl_sift_new(width, height, log2(std::min(width,height)), 3, 0),
+                    &vl_sift_delete);
+    //if (!sift) { return false; }
+
+
+    vl_sift_set_peak_thresh(sift.get(), options.peak_threshold);
+    vl_sift_set_edge_thresh(sift.get(), options.edge_threshold);
+
+    // Iterate through octaves.
+    std::vector<size_t> level_num_features;
+    std::vector<FeatureKeypoints> level_keypoints;
+    std::vector<FeatureDescriptors> level_descriptors;
+    bool first_octave = true;
+
+    
+    while (true)
+    {
+        if (first_octave)
+        {
+            const std::vector<uint8_t> data_uint8 = bitmap.ConvertToRowMajorArray();
+            std::vector<float> data_float(data_uint8.size());
+            
+            for (size_t i = 0; i < data_uint8.size(); ++i)
+            { data_float[i] = static_cast<float>(data_uint8[i]) / 255.0f; }
+            
+            if (vl_sift_process_first_octave(sift.get(), data_float.data()))
+            { break; }
+        
+            first_octave = false;
+        } else {
+            if (vl_sift_process_next_octave(sift.get()))
+            { break; }
+        }
+
+        // Detect keypoints.
+        vl_sift_detect(sift.get());
+
+        // Extract detected keypoints.
+        const VlSiftKeypoint* vl_keypoints = vl_sift_get_keypoints(sift.get());
+        const int num_keypoints = vl_sift_get_nkeypoints(sift.get());
+        if (num_keypoints == 0)
+        { continue; }
+
+        // Extract features with different orientations per DOG level.
+        size_t level_idx = 0;
+        int prev_level = -1;
+        for (int i = 0; i < num_keypoints; ++i)
+        {
+            if (vl_keypoints[i].is != prev_level)
+            {
+                if (i > 0)
+                {
+                    // Resize containers of previous DOG level.
+                    level_keypoints.back().resize(level_idx);
+                    if (descriptors != nullptr)
+                    { level_descriptors.back().conservativeResize(level_idx, 128); }
+                }
+
+                // Add containers for new DOG level.
+                level_idx = 0;
+                level_num_features.push_back(0);
+                level_keypoints.emplace_back(options.max_num_orientations * num_keypoints);
+
+                if (descriptors != nullptr)
+                {
+                    level_descriptors.emplace_back(
+                    options.max_num_orientations * num_keypoints, 128);
+                }
+                // Add containers for new DOG level.
+                level_idx = 0;
+                level_num_features.push_back(0);
+                level_keypoints.emplace_back(options.max_num_orientations * num_keypoints);
+                if (descriptors != nullptr)
+                {
+                    level_descriptors.emplace_back(options.max_num_orientations * num_keypoints, 128);
+                }
+            }
+
+            level_num_features.back() += 1;
+            prev_level = vl_keypoints[i].is;
+
+            // Extract feature orientations.
+            double angles[4];
+            int num_orientations;
+            if (options.upright)
+            {
+                num_orientations = 1;
+                angles[0] = 0.0;
+            } else {
+                num_orientations = vl_sift_calc_keypoint_orientations(sift.get(), angles, &vl_keypoints[i]);
+            }
+
+            // Note that this is different from SiftGPU, which selects the top
+            // global maxima as orientations while this selects the first two
+            // local maxima. It is not clear which procedure is better.
+            const int num_used_orientations = std::min(num_orientations, options.max_num_orientations);
+
+            for (int o = 0; o < num_used_orientations; ++o)
+            {
+                level_keypoints.back()[level_idx] =
+                    FeatureKeypoint(vl_keypoints[i].x + 0.5f, vl_keypoints[i].y + 0.5f,
+                                    vl_keypoints[i].sigma, angles[o]);
+                if (descriptors != nullptr)
+                {
+                    Eigen::MatrixXf desc(1, 128);
+                    vl_sift_calc_keypoint_descriptor(sift.get(), desc.data(), &vl_keypoints[i], angles[o]);
+                    if (options.normalization == SiftExtractionOptions::Normalization::L2)
+                    { desc = L2NormalizeFeatureDescriptors(desc); }
+
+                    else if (options.normalization == SiftExtractionOptions::Normalization::L1_ROOT)
+                    { desc = L1RootNormalizeFeatureDescriptors(desc); }
+
+                    else
+                    { LOG(FATAL) << "Normalization type not supported"; }
+
+                    level_descriptors.back().row(level_idx) = FeatureDescriptorsToUnsignedByte(desc);
+                }
+
+                level_idx += 1;
+            }
+        }
+
+        // Resize containers for last DOG level in octave.
+        level_keypoints.back().resize(level_idx);
+        if (descriptors != nullptr)
+        { level_descriptors.back().conservativeResize(level_idx, 128); }
+    }
+
+    // Determine how many DOG levels to keep to satisfy max_num_features option.
+    int first_level_to_keep = 0;
+    int num_features = 0;
+    int num_features_with_orientations = 0;
+
+    for (int i = level_keypoints.size() - 1; i >= 0; --i)
+    {
+        num_features += level_num_features[i];
+        num_features_with_orientations += level_keypoints[i].size();
+    
+        if (num_features > options.max_num_features)
+        {
+            first_level_to_keep = i;
+            break;
+        }
+    }
+
+    // Extract the features to be kept.
+    {
+        size_t k = 0;
+        keypoints->resize(num_features_with_orientations);
+
+        for (size_t i = first_level_to_keep; i < level_keypoints.size(); ++i)
+        {
+            for (size_t j = 0; j < level_keypoints[i].size(); ++j)
+            {
+                (*keypoints)[k] = level_keypoints[i][j];
+                k += 1;
+            }
+        }
+    }
+
+    // Compute the descriptors for the detected keypoints.
+    if (descriptors != nullptr)
+    {
+        size_t k = 0;
+        descriptors->resize(num_features_with_orientations, 128);
+    
+        for (size_t i = first_level_to_keep; i < level_keypoints.size(); ++i)
+        {
+            for (size_t j = 0; j < level_keypoints[i].size(); ++j)
+            {
+                descriptors->row(k) = level_descriptors[i].row(j);
+                k += 1;
+            }
+        }
+        *descriptors = TransformVLFeatToUBCFeatureDescriptors(*descriptors);
+    }
+
+    return true;
+    */
 }

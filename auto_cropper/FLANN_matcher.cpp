@@ -145,7 +145,7 @@ void localise(Mat img_1, Mat img_matches, std::vector<KeyPoint> keypoints_1, std
     obj_corners[2] = cvPoint( img_1.cols, img_1.rows ); obj_corners[3] = cvPoint( 0, img_1.rows );
     std::vector<Point2f> scene_corners(4);
 
-    perspectiveTransform( obj_corners, scene_corners, H);
+    perspectiveTransform( obj_corners, scene_corners, H );
 
     //-- Draw lines between the corners (the mapped object in the scene - image_2 )
     line( img_matches, scene_corners[0] + Point2f( img_1.cols, 0), scene_corners[1] + Point2f( img_1.cols, 0), Scalar( 0, 255, 0), 4 );

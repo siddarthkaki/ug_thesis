@@ -39,6 +39,11 @@ void Reconstruction::Load()
 
     if ( input_file.is_open() )
     {
+        unsigned ind_total_tracks = 0;
+
+        // allocate space for entire descriptors matrix
+        all_descriptors.resize(Reconstruction::DescriptorCount(*db),128);
+
         // skip header comments
         for( unsigned i = 0; i < 3; i++ ) { getline( input_file, curr_line ); }
 
@@ -97,7 +102,7 @@ void Reconstruction::Load()
                     const char *pBuffer = reinterpret_cast<const char*>( sqlite3_column_blob(stmt, 3) );
                     std::copy( pBuffer, pBuffer + data.size(), &data[0] );
 
-                    unsigned curr_start = (point_temp.POINT2D_IDX.at(j)-1)*128; // checked
+                    unsigned curr_start = point_temp.POINT2D_IDX.at(j)*128; // checked
                     unsigned curr_end = curr_start+127; // checked
 
                     VectorXi curr_descriptor(128);
@@ -106,9 +111,12 @@ void Reconstruction::Load()
                     { curr_descriptor(k) = ( (int) ((uint8_t) data.at(curr_start + k)) ); }
 
                     point_temp.point_descriptors.block<1,128>(j,0) = curr_descriptor;
+                    all_descriptors.block<1,128>(ind_total_tracks,0) = curr_descriptor;
                 }
 
                 rc = sqlite3_finalize(stmt);
+
+                ind_total_tracks++;
 
             }
 
@@ -156,5 +164,21 @@ unsigned Reconstruction::LineCount(std::string filename)
         std::istream_iterator<char>(), 
         '\n');
 
+    return count;
+}
+
+unsigned Reconstruction::DescriptorCount(sqlite3 &db)
+{
+    unsigned count = 0;
+
+    sqlite3_stmt *stm;
+    std::string zSql = "SELECT * FROM descriptors";
+    sqlite3_prepare_v2(&db, zSql.c_str(), -1, &stm, NULL);
+
+    while (sqlite3_step(stm) != SQLITE_DONE)
+    {
+        count = count + sqlite3_column_int(stm,1);
+    }
+    
     return count;
 }

@@ -14,54 +14,54 @@ db.open;
 
 pc_file_id = fullfile(pwd, '../data/sparse/0/points3D.txt');
 
-num_points = linecount(pc_file_id) - 3;
+num_points = 5;%linecount(pc_file_id) - 3;
 
 pos = zeros(num_points, 3);
 
 mean_descriptors = zeros(num_points,128);
 
-% tic
-% % loop though points in 3D point cloud
-% for i = 1:50:num_points,
-%     curr_line = import_points3D_line(pc_file_id, i); % extract specific line
-%     
-%     curr_id = curr_line(1); % POINT3D_ID
-%     curr_pos = curr_line(2:4); % X,Y,Z
-%     pos(i,1:3) = curr_pos;
-%     
-%     num_tracks = (length(curr_line) - 8)/2; % number of images with this point
-%     
-%     curr_descriptors = zeros(num_tracks,128);
-%     
-%     % loop through each image with this point
-%     for j = 1:num_tracks,
-%         curr_image_id = curr_line(7+2*j); % IMAGE_ID
-%         curr_point2d_idx = curr_line(8+2*j); % POINT2D_IDX
-%                 
-%         %st = db.prepare(['SELECT * FROM cameras'])
-%         st = db.prepare(['SELECT * FROM descriptors WHERE image_id=' num2str(curr_image_id)]);
-%         while st.step,
-%             % returning the data type from the desired column
-%             curr_num_descriptors = st.columnInt(1); % get num of descriptors from column 1
-%             curr_descriptors_blob = st.columnBlob(3); % get descriptors blob from column 3
-%             
-%             curr_start = (curr_point2d_idx-1)*128+1;
-%             curr_end = curr_start+127;
-%             curr_descriptor = curr_descriptors_blob(curr_start:curr_end);
-%             
-%             curr_descriptors(j,:) = curr_descriptor;
-%         end
-%     end
-%     
-%     mean_descriptors(i,:) = mean(curr_descriptors,1);
-%     
-% end
-% toc
-% 
-% points = pos;
+tic
+% loop though points in 3D point cloud
+for i = 1:num_points,
+    curr_line = import_points3D_line(pc_file_id, i); % extract specific line
+    
+    curr_id = curr_line(1); % POINT3D_ID
+    curr_pos = curr_line(2:4); % X,Y,Z
+    pos(i,1:3) = curr_pos;
+    
+    num_tracks = (length(curr_line) - 8)/2; % number of images with this point
+    
+    curr_descriptors = zeros(num_tracks,128);
+    
+    % loop through each image with this point
+    for j = 1:num_tracks,
+        curr_image_id = curr_line(7+2*j); % IMAGE_ID
+        curr_point2d_idx = curr_line(8+2*j); % POINT2D_IDX
+                
+        %st = db.prepare(['SELECT * FROM cameras'])
+        st = db.prepare(['SELECT * FROM descriptors WHERE image_id=' num2str(curr_image_id)]);
+        while st.step,
+            % returning the data type from the desired column
+            curr_num_descriptors = st.columnInt(1); % get num of descriptors from column 1
+            curr_descriptors_blob = st.columnBlob(3); % get descriptors blob from column 3
+            
+            curr_start = (curr_point2d_idx-1)*128+1;
+            curr_end = curr_start+127;
+            curr_descriptor = curr_descriptors_blob(curr_start:curr_end);
+            
+            curr_descriptors(j,:) = curr_descriptor;
+        end
+    end
+    
+    mean_descriptors(i,:) = mean(curr_descriptors,1);
+    
+end
+toc
+
+points = pos;
 % 
 % save('points.mat', 'points')
-load('points.mat')
+%load('points.mat')
 
 %% projection
 
@@ -83,7 +83,7 @@ image_size = [image_size_y, image_size_x];
 
 % create a transform matrix
 angles = deg2rad([5,-5,75]);
-angles = deg2rad([0,0,0]);
+%angles = deg2rad([0,0,0]);
 position = [-1,-4,5];
 position = [-0.743449, -3.23341, 7.8009];
 tform = eye(4);
