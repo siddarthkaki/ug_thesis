@@ -64,7 +64,7 @@ int main( int argc, char** argv )
     //-- Step 1: Detect the keypoints using SURF/SIFT Detector
     int min_hessian = atoi( config_params.at("min_hessian").c_str() );
 
-    SiftFeatureDetector detector( min_hessian );
+    SurfFeatureDetector detector( min_hessian );
 
     std::vector<KeyPoint> keypoints_cam, keypoints_map;
 
@@ -75,7 +75,7 @@ int main( int argc, char** argv )
     std::cout << "Cam Num KeyPoints: " << keypoints_map.size() << std::endl;
 
     //-- Step 2: Calculate descriptors (feature vectors)
-    SiftDescriptorExtractor extractor;
+    SurfDescriptorExtractor extractor;
 
     Mat descriptors_cam, descriptors_map;
 
@@ -145,16 +145,23 @@ int main( int argc, char** argv )
     //-- Image display output
     if(1)
     {
-        Mat out_img_1, out_img_2, out_img_3;
+        Mat out_img_1, out_img_2, out_img_3, out_img_4;
 
         drawKeypoints(img_cam, obj_keypts, out_img_1, Scalar::all(-1), DrawMatchesFlags::DEFAULT);
         imshow( "Object localisation", out_img_1 );
+        imwrite( "obj_local.jpg", out_img_1 );
 
         drawKeypoints(img_cam, matched_keypts, out_img_2, Scalar::all(-1), DrawMatchesFlags::DEFAULT);
         imshow( "Matched Keypoints", out_img_2 );
+        imwrite( "match_key.jpg", out_img_2 );
 
         drawKeypoints(img_cam, keypoints_cam, out_img_3, Scalar::all(-1), DrawMatchesFlags::DEFAULT);
         imshow( "All Keypoints", out_img_3 );
+        imwrite( "all_key.jpg", out_img_3 );
+        
+        drawKeypoints(img_map, keypoints_map, out_img_4, Scalar::all(-1), DrawMatchesFlags::DEFAULT);
+        imshow( "All Keypoints", out_img_4 );
+        imwrite( "all_key_map.jpg", out_img_4 );
     }
 
 

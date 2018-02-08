@@ -25,6 +25,8 @@
 #include "opencv2/features2d/features2d.hpp"
 #include "opencv2/nonfree/nonfree.hpp"
 #include "opencv2/nonfree/features2d.hpp"
+#include "ext_libs/colmap/src/feature/types.h"
+#include "ext_libs/colmap/src/feature/utils.h"
 //#include "opencv2/xfeatures2d/nonfree.hpp"
 
 extern "C"
@@ -48,8 +50,36 @@ std::map<std::string,std::string> LoadConfig(std::string filename);
 Rect BoundingBox(Mat *img_cam, std::vector<KeyPoint> *keypoints);
 std::vector< std::vector<KeyPoint> > DBSCAN_keypoints(std::vector<KeyPoint> *keypoints, float eps, int min_pts);
 std::vector<int> RegionQuery(std::vector<KeyPoint> *keypoints, KeyPoint *keypoint, float eps);
-cv::Mat1f VLFeatSiftFeatures(cv::Mat img_cam);
-void ColmapSiftFeatures(cv::Mat img_cam);
+cv::Mat1f VLFSiftFeatures(cv::Mat img_cam);
+cv::Mat1f VLFDSiftFeatures(cv::Mat img_cam);
+bool ColmapSiftFeatures(cv::Mat img_cam);
+
+struct colmap_options
+{
+    // Maximum number of features to detect, keeping larger-scale features.
+    int max_num_features = 8192;
+
+    // First octave in the pyramid, i.e. -1 upsamples the image by one level.
+    int first_octave = -1;
+
+    // Number of octaves.
+    int num_octaves = 4;
+
+    // Number of levels per octave.
+    int octave_resolution = 3;
+
+    // Peak threshold for detection.
+    double peak_threshold = 0.02 / octave_resolution;
+
+    // Edge threshold for detection.
+    double edge_threshold = 10.0;
+
+    // Maximum number of orientations per keypoint if not estimate_affine_shape.
+    int max_num_orientations = 2;
+
+    // Fix the orientation to 0 for upright features.
+    bool upright = false;
+}; colmap_options options;
 
 /**
  * @function main
@@ -193,7 +223,10 @@ int main( int argc, char** argv )
     cv::Mat descriptors_map;
     eigen2cv(recon.mean_descriptors, descriptors_map);
     //eigen2cv(recon.all_descriptors, descriptors_map);
-    cv::Mat vlf_descriptors_map = VLFeatSiftFeatures(img_cam);
+    cv::Mat vlf_descriptors_map = VLFDSiftFeatures(img_cam);
+
+    bool colmap_test = ColmapSiftFeatures(img_cam);
+
 
     std::cout << "    Cam SIFT Size: " << descriptors_cam.size() << std::endl;
     std::cout << " CV Map SIFT Size: " << descriptors_map.size() << std::endl;
@@ -501,10 +534,59 @@ vector<int> RegionQuery(std::vector<KeyPoint> *keypoints, KeyPoint *keypoint, fl
 }
 
 /**
- * @function VLFeatSiftFeatures
+ * @function VLFSiftFeatures
  * @brief VLFeat implementation of SIFT feature extraction
  */
-cv::Mat1f VLFeatSiftFeatures(cv::Mat img_cam)
+cv::Mat1f VLFSiftFeatures(cv::Mat img_cam)
+{
+    /*
+    unsigned width  = img_cam.cols;
+    unsigned height = img_cam.rows;
+
+    // create filter
+    VlDsiftFilter* vlf = vl_dsift_new_basic(width, height, 1, 3);
+    //VlDsiftFilter* vlf = vl_dsift_new(width, height);
+    //VlSiftFilt* vlf = vl_sift_new (width, height, 3, 5, 0) ;
+
+    VlsiftFilter* vlf = vl_sift_new(width, height, 4, 3, -1); // params from COLMAP sift.h
+    
+    // transform image in cv::Mat to float vector
+    cv::Mat img_cam_float;
+    img_cam.convertTo(img_cam_float, CV_32F, 1.0/255.0);
+    // std::vector<float> img_vec;
+    /*for (int i = 0; i < height; ++i)
+    {
+        for (int j = 0; j < width; ++j)
+        {
+            img_vec.push_back(img_cam.at<unsigned char>(i,j) / 255.0f);                                                                                                                                                                                                        
+        }
+    }
+
+    // call processing function of vl
+    vl_dsift_process(vlf, img_cam_float.ptr<float>());
+
+    // echo number of keypoints found
+    //std::cout << "VLFeat Num Des: " << vl_dsift_get_keypoint_num(vlf) << std::endl;
+
+    // Extract keypoints
+    const VlDsiftKeypoint* vlkeypoints = vl_dsift_get_keypoints(vlf);
+
+    // Extract descriptors
+    // const float* vldescriptors = vl_dsift_get_descriptors(vlf);
+
+    cv::Mat1f descriptors;
+    cv::Mat scaleDescs(vl_dsift_get_keypoint_num(vlf), 128, CV_32F, (void*) vl_dsift_get_descriptors(vlf));
+    descriptors.push_back(scaleDescs);
+
+    return descriptors;*/
+}
+
+
+/**
+ * @function VLFDSiftFeatures
+ * @brief VLFeat implementation of Dense SIFT feature extraction
+ */
+cv::Mat1f VLFDSiftFeatures(cv::Mat img_cam)
 {
     unsigned width  = img_cam.cols;
     unsigned height = img_cam.rows;
@@ -550,25 +632,29 @@ cv::Mat1f VLFeatSiftFeatures(cv::Mat img_cam)
  * @function ColmapSiftFeatures
  * @brief VLFeat implementation of SIFT feature extraction; from COLMAP; todo citation
  */
-void ColmapSiftFeatures(cv::Mat img_cam)
+bool ColmapSiftFeatures(cv::Mat img_cam)
 {
-    /*
-    float width, height = img_cam.cols, img_cam.rows;
+    colmap::FeatureKeypoints* keypoints;
+    colmap::FeatureDescriptors* descriptors;
+    
+    unsigned width  = img_cam.cols;
+    unsigned height = img_cam.rows;
     
     // Setup SIFT extractor.
     std::unique_ptr<VlSiftFilt, void (*)(VlSiftFilt*)> sift(
-        vl_sift_new(width, height, log2(std::min(width,height)), 3, 0),
+        vl_sift_new(width, height, options.num_octaves,
+                    options.octave_resolution, options.first_octave),
                     &vl_sift_delete);
-    //if (!sift) { return false; }
-
+    
+    if (!sift) { return false; }
 
     vl_sift_set_peak_thresh(sift.get(), options.peak_threshold);
     vl_sift_set_edge_thresh(sift.get(), options.edge_threshold);
 
     // Iterate through octaves.
     std::vector<size_t> level_num_features;
-    std::vector<FeatureKeypoints> level_keypoints;
-    std::vector<FeatureDescriptors> level_descriptors;
+    std::vector<colmap::FeatureKeypoints> level_keypoints;
+    std::vector<colmap::FeatureDescriptors> level_descriptors;
     bool first_octave = true;
 
     
@@ -576,13 +662,18 @@ void ColmapSiftFeatures(cv::Mat img_cam)
     {
         if (first_octave)
         {
-            const std::vector<uint8_t> data_uint8 = bitmap.ConvertToRowMajorArray();
-            std::vector<float> data_float(data_uint8.size());
-            
-            for (size_t i = 0; i < data_uint8.size(); ++i)
-            { data_float[i] = static_cast<float>(data_uint8[i]) / 255.0f; }
-            
-            if (vl_sift_process_first_octave(sift.get(), data_float.data()))
+            //const std::vector<uint8_t> data_uint8 = bitmap.ConvertToRowMajorArray();
+            //std::vector<float> data_float(data_uint8.size());            
+            //for (size_t i = 0; i < data_uint8.size(); ++i)
+            //{ data_float[i] = static_cast<float>(data_uint8[i]) / 255.0f; }
+            // transform image in cv::Mat to float vector
+            std::vector<float> img_float;
+            for (int i = 0; i < height; ++i)
+            { for (int j = 0; j < width; ++j)
+                { img_float.push_back(img_cam.at<unsigned char>(i,j) / 255.0f); }
+            }
+
+            if (vl_sift_process_first_octave(sift.get(), img_float.data()))
             { break; }
         
             first_octave = false;
@@ -657,22 +748,23 @@ void ColmapSiftFeatures(cv::Mat img_cam)
             for (int o = 0; o < num_used_orientations; ++o)
             {
                 level_keypoints.back()[level_idx] =
-                    FeatureKeypoint(vl_keypoints[i].x + 0.5f, vl_keypoints[i].y + 0.5f,
-                                    vl_keypoints[i].sigma, angles[o]);
+                    colmap::FeatureKeypoint(vl_keypoints[i].x + 0.5f, vl_keypoints[i].y + 0.5f,
+                                            vl_keypoints[i].sigma, angles[o]);
                 if (descriptors != nullptr)
                 {
                     Eigen::MatrixXf desc(1, 128);
                     vl_sift_calc_keypoint_descriptor(sift.get(), desc.data(), &vl_keypoints[i], angles[o]);
-                    if (options.normalization == SiftExtractionOptions::Normalization::L2)
-                    { desc = L2NormalizeFeatureDescriptors(desc); }
+                    
+                    //if (options.normalization == SiftExtractionOptions::Normalization::L2)
+                    //{ desc = L2NormalizeFeatureDescriptors(desc); }
 
-                    else if (options.normalization == SiftExtractionOptions::Normalization::L1_ROOT)
-                    { desc = L1RootNormalizeFeatureDescriptors(desc); }
+                    //else if (options.normalization == SiftExtractionOptions::Normalization::L1_ROOT)
+                    { desc = colmap::L1RootNormalizeFeatureDescriptors(desc); }
 
-                    else
-                    { LOG(FATAL) << "Normalization type not supported"; }
+                    //else
+                    //{ LOG(FATAL) << "Normalization type not supported"; }
 
-                    level_descriptors.back().row(level_idx) = FeatureDescriptorsToUnsignedByte(desc);
+                    level_descriptors.back().row(level_idx) = colmap::FeatureDescriptorsToUnsignedByte(desc);
                 }
 
                 level_idx += 1;
@@ -731,9 +823,8 @@ void ColmapSiftFeatures(cv::Mat img_cam)
                 k += 1;
             }
         }
-        *descriptors = TransformVLFeatToUBCFeatureDescriptors(*descriptors);
+        //*descriptors = TransformVLFeatToUBCFeatureDescriptors(*descriptors);
     }
 
     return true;
-    */
 }
