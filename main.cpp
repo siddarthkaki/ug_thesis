@@ -169,6 +169,25 @@ int main( int argc, char** argv )
 
     if( !img_cam.data ) { printf(" --(!) Error reading image \n"); return -1; }
 
+
+
+
+
+    // COLMAP SYS CALL TODO
+    std::string cm_image_path = config_params.at("img_cam");
+    system("mkdir .temp_img/");
+    std::string sys_call = "cp " + cm_image_path + " ./temp_img/";
+    system(sys_call.c_str());
+    std::string cm_database_path = "brickseal1_img_cam.db";
+    //std::cout << cm_database_path << std::endl;
+    std::string cm_sys_call = "colmap feature_extractor --database_path " + cm_database_path + " --image_path .temp_img --SiftExtraction.use_gpu 0";
+    std::cout << cm_sys_call << std::endl;
+    int cm_sys_res = system(cm_sys_call.c_str());
+
+
+
+
+
     // read in threshold for discriptor "distance" comparison
     float threshold = atof( config_params.at("feature_comparison_max_distance").c_str() );
 
@@ -552,188 +571,5 @@ cv::Mat1f VLFeatSiftFeatures(cv::Mat img_cam)
  */
 void ColmapSiftFeatures(cv::Mat img_cam)
 {
-    /*
-    float width, height = img_cam.cols, img_cam.rows;
-    
-    // Setup SIFT extractor.
-    std::unique_ptr<VlSiftFilt, void (*)(VlSiftFilt*)> sift(
-        vl_sift_new(width, height, log2(std::min(width,height)), 3, 0),
-                    &vl_sift_delete);
-    //if (!sift) { return false; }
 
-
-    vl_sift_set_peak_thresh(sift.get(), options.peak_threshold);
-    vl_sift_set_edge_thresh(sift.get(), options.edge_threshold);
-
-    // Iterate through octaves.
-    std::vector<size_t> level_num_features;
-    std::vector<FeatureKeypoints> level_keypoints;
-    std::vector<FeatureDescriptors> level_descriptors;
-    bool first_octave = true;
-
-    
-    while (true)
-    {
-        if (first_octave)
-        {
-            const std::vector<uint8_t> data_uint8 = bitmap.ConvertToRowMajorArray();
-            std::vector<float> data_float(data_uint8.size());
-            
-            for (size_t i = 0; i < data_uint8.size(); ++i)
-            { data_float[i] = static_cast<float>(data_uint8[i]) / 255.0f; }
-            
-            if (vl_sift_process_first_octave(sift.get(), data_float.data()))
-            { break; }
-        
-            first_octave = false;
-        } else {
-            if (vl_sift_process_next_octave(sift.get()))
-            { break; }
-        }
-
-        // Detect keypoints.
-        vl_sift_detect(sift.get());
-
-        // Extract detected keypoints.
-        const VlSiftKeypoint* vl_keypoints = vl_sift_get_keypoints(sift.get());
-        const int num_keypoints = vl_sift_get_nkeypoints(sift.get());
-        if (num_keypoints == 0)
-        { continue; }
-
-        // Extract features with different orientations per DOG level.
-        size_t level_idx = 0;
-        int prev_level = -1;
-        for (int i = 0; i < num_keypoints; ++i)
-        {
-            if (vl_keypoints[i].is != prev_level)
-            {
-                if (i > 0)
-                {
-                    // Resize containers of previous DOG level.
-                    level_keypoints.back().resize(level_idx);
-                    if (descriptors != nullptr)
-                    { level_descriptors.back().conservativeResize(level_idx, 128); }
-                }
-
-                // Add containers for new DOG level.
-                level_idx = 0;
-                level_num_features.push_back(0);
-                level_keypoints.emplace_back(options.max_num_orientations * num_keypoints);
-
-                if (descriptors != nullptr)
-                {
-                    level_descriptors.emplace_back(
-                    options.max_num_orientations * num_keypoints, 128);
-                }
-                // Add containers for new DOG level.
-                level_idx = 0;
-                level_num_features.push_back(0);
-                level_keypoints.emplace_back(options.max_num_orientations * num_keypoints);
-                if (descriptors != nullptr)
-                {
-                    level_descriptors.emplace_back(options.max_num_orientations * num_keypoints, 128);
-                }
-            }
-
-            level_num_features.back() += 1;
-            prev_level = vl_keypoints[i].is;
-
-            // Extract feature orientations.
-            double angles[4];
-            int num_orientations;
-            if (options.upright)
-            {
-                num_orientations = 1;
-                angles[0] = 0.0;
-            } else {
-                num_orientations = vl_sift_calc_keypoint_orientations(sift.get(), angles, &vl_keypoints[i]);
-            }
-
-            // Note that this is different from SiftGPU, which selects the top
-            // global maxima as orientations while this selects the first two
-            // local maxima. It is not clear which procedure is better.
-            const int num_used_orientations = std::min(num_orientations, options.max_num_orientations);
-
-            for (int o = 0; o < num_used_orientations; ++o)
-            {
-                level_keypoints.back()[level_idx] =
-                    FeatureKeypoint(vl_keypoints[i].x + 0.5f, vl_keypoints[i].y + 0.5f,
-                                    vl_keypoints[i].sigma, angles[o]);
-                if (descriptors != nullptr)
-                {
-                    Eigen::MatrixXf desc(1, 128);
-                    vl_sift_calc_keypoint_descriptor(sift.get(), desc.data(), &vl_keypoints[i], angles[o]);
-                    if (options.normalization == SiftExtractionOptions::Normalization::L2)
-                    { desc = L2NormalizeFeatureDescriptors(desc); }
-
-                    else if (options.normalization == SiftExtractionOptions::Normalization::L1_ROOT)
-                    { desc = L1RootNormalizeFeatureDescriptors(desc); }
-
-                    else
-                    { LOG(FATAL) << "Normalization type not supported"; }
-
-                    level_descriptors.back().row(level_idx) = FeatureDescriptorsToUnsignedByte(desc);
-                }
-
-                level_idx += 1;
-            }
-        }
-
-        // Resize containers for last DOG level in octave.
-        level_keypoints.back().resize(level_idx);
-        if (descriptors != nullptr)
-        { level_descriptors.back().conservativeResize(level_idx, 128); }
-    }
-
-    // Determine how many DOG levels to keep to satisfy max_num_features option.
-    int first_level_to_keep = 0;
-    int num_features = 0;
-    int num_features_with_orientations = 0;
-
-    for (int i = level_keypoints.size() - 1; i >= 0; --i)
-    {
-        num_features += level_num_features[i];
-        num_features_with_orientations += level_keypoints[i].size();
-    
-        if (num_features > options.max_num_features)
-        {
-            first_level_to_keep = i;
-            break;
-        }
-    }
-
-    // Extract the features to be kept.
-    {
-        size_t k = 0;
-        keypoints->resize(num_features_with_orientations);
-
-        for (size_t i = first_level_to_keep; i < level_keypoints.size(); ++i)
-        {
-            for (size_t j = 0; j < level_keypoints[i].size(); ++j)
-            {
-                (*keypoints)[k] = level_keypoints[i][j];
-                k += 1;
-            }
-        }
-    }
-
-    // Compute the descriptors for the detected keypoints.
-    if (descriptors != nullptr)
-    {
-        size_t k = 0;
-        descriptors->resize(num_features_with_orientations, 128);
-    
-        for (size_t i = first_level_to_keep; i < level_keypoints.size(); ++i)
-        {
-            for (size_t j = 0; j < level_keypoints[i].size(); ++j)
-            {
-                descriptors->row(k) = level_descriptors[i].row(j);
-                k += 1;
-            }
-        }
-        *descriptors = TransformVLFeatToUBCFeatureDescriptors(*descriptors);
-    }
-
-    return true;
-    */
 }
