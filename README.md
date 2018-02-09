@@ -23,3 +23,5 @@
 * OpenCV (including non-free)
 * Eigen
 * Boost (Serialisation)
+* Ceres Solver
+* COLMAP
