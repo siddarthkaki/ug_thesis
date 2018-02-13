@@ -5,6 +5,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #include <time.h>
 #include <fstream>
@@ -190,8 +191,8 @@ int main( int argc, char** argv )
 
     // convert Eigen matrix of mean descriptors to CV matrix
     cv::Mat descriptors_map;
-    //eigen2cv(recon.mean_descriptors, descriptors_map);
-    eigen2cv(recon.all_descriptors, descriptors_map);
+    eigen2cv(recon.mean_descriptors, descriptors_map);
+    //eigen2cv(recon.all_descriptors, descriptors_map);
     //cv::Mat vlf_descriptors_map = VLFeatSiftFeatures(img_cam);
 
     std::cout << "COLMAP Cam SIFT Size: " << descriptors_cam.size() << std::endl;
@@ -560,8 +561,29 @@ std::vector<cv::KeyPoint> ColmapSiftKeypoints(std::string cm_database_path)
         for ( unsigned j = 0; j < num_keypoints; j++ )
         {
             cv::KeyPoint kp_temp;
-            kp_temp.pt.x = (float) ((float) data.at(curr_start + 0));
-            kp_temp.pt.y = (float) ((float) data.at(curr_start + 1));
+            kp_temp.pt.x = 0.0;
+            kp_temp.pt.y = 0.0;
+
+            //kp_temp.pt.x = atof(&pBuffer[0+curr_start*4]);
+            //kp_temp.pt.y = atof(&pBuffer[4+curr_start*4]);
+            
+            //memcpy( &kp_temp.pt.x, pBuffer[0+curr_start*4], sizeof(float) );
+            //memcpy( &kp_temp.pt.y, pBuffer[4+curr_start*4], sizeof(float) );
+
+            char temp_x[sizeof(float)];
+            char temp_y[sizeof(float)];
+
+            std::copy( pBuffer + curr_start*4    , pBuffer + curr_start*4 + 4, &temp_x[0] );
+            std::copy( pBuffer + curr_start*4 + 4, pBuffer + curr_start*4 + 8, &temp_y[0] );
+
+            memcpy(&kp_temp.pt.x, &temp_x, sizeof(float));
+            memcpy(&kp_temp.pt.y, &temp_y, sizeof(float));
+
+            //kp_temp.pt.x = (float)(temp_x);
+            //kp_temp.pt.y = (float)(temp_y);
+            
+            //kp_temp.pt.x = ((float) data.at(curr_start + 0));
+            //kp_temp.pt.y = ((float) data.at(curr_start + 1));
 
             img_keypoints.push_back(kp_temp);
 
