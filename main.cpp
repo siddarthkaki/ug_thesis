@@ -27,13 +27,6 @@
 #include "opencv2/nonfree/features2d.hpp"
 //#include "opencv2/xfeatures2d/nonfree.hpp"
 
-extern "C"
-{  
-    #include <vl/generic.h>
-    #include <vl/sift.h>
-    #include <vl/dsift.h>
-}
-
 using namespace cv;
 
 using Eigen::MatrixXd;
@@ -48,7 +41,6 @@ std::map<std::string,std::string> LoadConfig(std::string filename);
 Rect BoundingBox(Mat *img_cam, std::vector<KeyPoint> *keypoints);
 std::vector< std::vector<KeyPoint> > DBSCAN_keypoints(std::vector<KeyPoint> *keypoints, float eps, int min_pts);
 std::vector<int> RegionQuery(std::vector<KeyPoint> *keypoints, KeyPoint *keypoint, float eps);
-cv::Mat1f VLFeatSiftFeatures(cv::Mat img_cam);
 cv::Mat ColmapSiftFeatures(std::map<std::string,std::string> config_params);
 
 /**
@@ -496,52 +488,6 @@ vector<int> RegionQuery(std::vector<KeyPoint> *keypoints, KeyPoint *keypoint, fl
         }
     }
     return ret_keys;
-}
-
-/**
- * @function VLFeatSiftFeatures
- * @brief VLFeat implementation of SIFT feature extraction
- */
-cv::Mat1f VLFeatSiftFeatures(cv::Mat img_cam)
-{
-    unsigned width  = img_cam.cols;
-    unsigned height = img_cam.rows;
-
-    // create filter
-    VlDsiftFilter* vlf = vl_dsift_new_basic(width, height, 1, 3);
-    //VlDsiftFilter* vlf = vl_dsift_new(width, height);
-    //VlSiftFilt* vlf = vl_sift_new (width, height, 3, 5, 0) ;
-
-    
-    // transform image in cv::Mat to float vector
-    cv::Mat img_cam_float;
-    img_cam.convertTo(img_cam_float, CV_32F, 1.0/255.0);
-    // std::vector<float> img_vec;
-    /*for (int i = 0; i < height; ++i)
-    {
-        for (int j = 0; j < width; ++j)
-        {
-            img_vec.push_back(img_cam.at<unsigned char>(i,j) / 255.0f);                                                                                                                                                                                                        
-        }
-    }*/
-
-    // call processing function of vl
-    vl_dsift_process(vlf, img_cam_float.ptr<float>());
-
-    // echo number of keypoints found
-    //std::cout << "VLFeat Num Des: " << vl_dsift_get_keypoint_num(vlf) << std::endl;
-
-    // Extract keypoints
-    const VlDsiftKeypoint* vlkeypoints = vl_dsift_get_keypoints(vlf);
-
-    // Extract descriptors
-    // const float* vldescriptors = vl_dsift_get_descriptors(vlf);
-
-    cv::Mat1f descriptors;
-    cv::Mat scaleDescs(vl_dsift_get_keypoint_num(vlf), 128, CV_32F, (void*) vl_dsift_get_descriptors(vlf));
-    descriptors.push_back(scaleDescs);
-
-    return descriptors;
 }
 
 /**
