@@ -49,7 +49,7 @@ Rect BoundingBox(Mat *img_cam, std::vector<KeyPoint> *keypoints);
 std::vector< std::vector<KeyPoint> > DBSCAN_keypoints(std::vector<KeyPoint> *keypoints, float eps, int min_pts);
 std::vector<int> RegionQuery(std::vector<KeyPoint> *keypoints, KeyPoint *keypoint, float eps);
 cv::Mat1f VLFeatSiftFeatures(cv::Mat img_cam);
-void ColmapSiftFeatures(cv::Mat img_cam);
+cv::Mat ColmapSiftFeatures(std::map<std::string,std::string> config_params);
 
 /**
  * @function main
@@ -169,25 +169,6 @@ int main( int argc, char** argv )
 
     if( !img_cam.data ) { printf(" --(!) Error reading image \n"); return -1; }
 
-
-
-
-
-    // COLMAP SYS CALL TODO
-    std::string cm_image_path = config_params.at("img_cam");
-    system("mkdir .temp_img/");
-    std::string sys_call = "cp " + cm_image_path + " ./temp_img/";
-    system(sys_call.c_str());
-    std::string cm_database_path = "brickseal1_img_cam.db";
-    //std::cout << cm_database_path << std::endl;
-    std::string cm_sys_call = "colmap feature_extractor --database_path " + cm_database_path + " --image_path .temp_img --SiftExtraction.use_gpu 0";
-    std::cout << cm_sys_call << std::endl;
-    int cm_sys_res = system(cm_sys_call.c_str());
-
-
-
-
-
     // read in threshold for discriptor "distance" comparison
     float threshold = atof( config_params.at("feature_comparison_max_distance").c_str() );
 
@@ -195,28 +176,26 @@ int main( int argc, char** argv )
     int min_hessian = atoi( config_params.at("min_hessian").c_str() );
 
     SiftFeatureDetector detector( min_hessian );
-
     // TODO - check if keypoints_map is actually needed
     std::vector<cv::KeyPoint> keypoints_cam, keypoints_map;
-
     detector.detect( img_cam, keypoints_cam );
 
     //-- Step 2: Calculate descriptors (feature vectors)
     SiftDescriptorExtractor extractor;
+    //cv::Mat descriptors_cam;
+    //extractor.compute( img_cam, keypoints_cam, descriptors_cam );
 
-    cv::Mat descriptors_cam;
-
-    extractor.compute( img_cam, keypoints_cam, descriptors_cam );
+    cv::Mat descriptors_cam = ColmapSiftFeatures(config_params);
 
     // convert Eigen matrix of mean descriptors to CV matrix
     cv::Mat descriptors_map;
-    eigen2cv(recon.mean_descriptors, descriptors_map);
-    //eigen2cv(recon.all_descriptors, descriptors_map);
-    cv::Mat vlf_descriptors_map = VLFeatSiftFeatures(img_cam);
+    //eigen2cv(recon.mean_descriptors, descriptors_map);
+    eigen2cv(recon.all_descriptors, descriptors_map);
+    //cv::Mat vlf_descriptors_map = VLFeatSiftFeatures(img_cam);
 
-    std::cout << "    Cam SIFT Size: " << descriptors_cam.size() << std::endl;
-    std::cout << " CV Map SIFT Size: " << descriptors_map.size() << std::endl;
-    std::cout << "VLF Map SIFT Size: " << vlf_descriptors_map.size() << std::endl;
+    std::cout << "COLMAP Cam SIFT Size: " << descriptors_cam.size() << std::endl;
+    std::cout << "COLMAP Map SIFT Size: " << descriptors_map.size() << std::endl;
+    //std::cout << "   VLF Map SIFT Size: " << vlf_descriptors_map.size() << std::endl;
 
 
     //std::cout << "Cam Descriptors:\n" << descriptors_cam << std::endl;
@@ -227,14 +206,14 @@ int main( int argc, char** argv )
     { descriptors_cam.convertTo(descriptors_cam, CV_32F); }
     if( descriptors_map.type() != CV_32F )
     { descriptors_map.convertTo(descriptors_map, CV_32F); }
-    if( vlf_descriptors_map.type() != CV_32F )
-    { vlf_descriptors_map.convertTo(vlf_descriptors_map, CV_32F); }
+    //if( vlf_descriptors_map.type() != CV_32F )
+    //{ vlf_descriptors_map.convertTo(vlf_descriptors_map, CV_32F); }
 
     //-- Step 3: Matching camera and map descriptors using FLANN matcher
     FlannBasedMatcher matcher;
     //BFMatcher matcher(NORM_L2);
     std::vector< DMatch > matches;
-    matcher.match( descriptors_cam, vlf_descriptors_map, matches );
+    matcher.match( descriptors_cam, descriptors_map, matches );
 
     double max_dist = 0; double min_dist = 1000;
 
@@ -569,7 +548,68 @@ cv::Mat1f VLFeatSiftFeatures(cv::Mat img_cam)
  * @function ColmapSiftFeatures
  * @brief VLFeat implementation of SIFT feature extraction; from COLMAP; todo citation
  */
-void ColmapSiftFeatures(cv::Mat img_cam)
+cv::Mat ColmapSiftFeatures(std::map<std::string,std::string> config_params)
 {
+    // COLMAP SYS CALL
+    std::string cm_image_path = config_params.at("img_cam");
+    system("mkdir .temp_img");
+    std::string sys_call = "cp " + cm_image_path + " .temp_img/";
+    system(sys_call.c_str());
+    std::string cm_database_path = "brickseal1_img_cam.db";
+    //std::cout << cm_database_path << std::endl;
+    std::string cm_sys_call = "colmap feature_extractor --database_path " + cm_database_path + " --image_path .temp_img --SiftExtraction.use_gpu 0";
+    std::cout << cm_sys_call << std::endl;
+    int cm_sys_res = system(cm_sys_call.c_str());
 
+    // setup db connection
+    sqlite3 *db;
+    char *zErrMsg = 0;
+    int rc;
+    rc = sqlite3_open(cm_database_path.c_str(), &db);
+    if( rc ) { fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db)); exit (EXIT_FAILURE); }
+    else     { fprintf(stderr, "Opened database successfully\n"); }
+
+    unsigned char *pzBlob; // holder pointer to blob
+    int *pnBlob; // retrieved blob size
+
+    sqlite3_stmt *stmt;
+    std::string zSql = "SELECT * FROM descriptors";
+    sqlite3_prepare_v2(db, zSql.c_str(), -1, &stmt, NULL);
+    rc = sqlite3_step(stmt);
+
+    MatrixXi img_descriptors;
+
+    if (rc == SQLITE_ROW)
+    {
+        unsigned curr_num_descriptors = sqlite3_column_int(stmt,1); // get num of descriptors from column 1
+
+        // allocate space for entire descriptors matrix
+        img_descriptors.resize(curr_num_descriptors,128);
+
+        // get uint8_t BLOB data from db
+        std::vector<char> data( sqlite3_column_bytes(stmt, 3) );
+        const char *pBuffer = reinterpret_cast<const char*>( sqlite3_column_blob(stmt, 3) );
+        std::copy( pBuffer, pBuffer + data.size(), &data[0] );
+
+        unsigned curr_start = 0; // checked
+        unsigned curr_end = curr_start+127; // checke
+
+        for ( unsigned j = 0; j < curr_num_descriptors; j++ )
+        {
+            VectorXi curr_descriptor(128);
+            for ( unsigned k = 0; k < 128; k++ )
+            {
+                curr_descriptor(k) = ( (int) ((uint8_t) data.at(curr_start + k)) );
+            }
+            img_descriptors.block<1,128>(j,0) = curr_descriptor;
+            curr_start += 128;
+        }
+    }
+
+    rc = sqlite3_close(db);
+
+    cv::Mat descriptors_cam;
+    eigen2cv(img_descriptors, descriptors_cam);
+
+    return descriptors_cam;
 }
