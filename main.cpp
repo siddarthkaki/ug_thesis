@@ -46,9 +46,10 @@ Rect BoundingBox(Mat *img_cam, std::vector<KeyPoint> *keypoints);
 std::vector< std::vector<KeyPoint> > DBSCAN_keypoints(std::vector<KeyPoint> *keypoints, float eps, int min_pts);
 std::vector<int> RegionQuery(std::vector<KeyPoint> *keypoints, KeyPoint *keypoint, float eps);
 
-void ColmapSiftFeatures(std::map<std::string,std::string> config_params, std::string cm_database_path);
-std::vector<cv::KeyPoint> ColmapSiftKeypoints(std::string cm_database_path);
-cv::Mat ColmapSiftDescriptors(std::string cm_database_path);
+void ColmapSiftFeatures(std::map<std::string,std::string> config_params);
+std::vector<cv::KeyPoint> ColmapSiftKeypoints();
+cv::Mat ColmapSiftDescriptors();
+void ColmapClean();
 
 /**
  * @function main
@@ -172,22 +173,23 @@ int main( int argc, char** argv )
     float threshold = atof( config_params.at("feature_comparison_max_distance").c_str() );
 
     //-- Step 1: Detect the keypoints using SURF/SIFT Detector
-    int min_hessian = atoi( config_params.at("min_hessian").c_str() );
+    //int min_hessian = atoi( config_params.at("min_hessian").c_str() );
 
-    SiftFeatureDetector detector( min_hessian );
+    //SiftFeatureDetector detector( min_hessian );
     // TODO - check if keypoints_map is actually needed
     //std::vector<cv::KeyPoint> keypoints_cam, keypoints_map;
     //detector.detect( img_cam, keypoints_cam );
 
     //-- Step 2: Calculate descriptors (feature vectors)
-    SiftDescriptorExtractor extractor;
+    //SiftDescriptorExtractor extractor;
     //cv::Mat descriptors_cam;
     //extractor.compute( img_cam, keypoints_cam, descriptors_cam );
 
-    std::string cm_database_path = "brickseal1_img_cam.db";
-    ColmapSiftFeatures(config_params, cm_database_path);
-    std::vector<cv::KeyPoint> keypoints_cam = ColmapSiftKeypoints(cm_database_path);
-    cv::Mat descriptors_cam = ColmapSiftDescriptors(cm_database_path);
+    //std::string cm_database_path = "brickseal1_img_cam.db";
+    ColmapSiftFeatures(config_params);
+    std::vector<cv::KeyPoint> keypoints_cam = ColmapSiftKeypoints();
+    cv::Mat descriptors_cam = ColmapSiftDescriptors();
+    ColmapClean();
 
     // convert Eigen matrix of mean descriptors to CV matrix
     cv::Mat descriptors_map;
@@ -504,14 +506,14 @@ vector<int> RegionQuery(std::vector<KeyPoint> *keypoints, KeyPoint *keypoint, fl
  * @function ColmapSiftFeatures
  * @brief COLMAP implementation of SIFT feature extraction
  */
-void ColmapSiftFeatures(std::map<std::string,std::string> config_params, std::string cm_database_path)
+void ColmapSiftFeatures(std::map<std::string,std::string> config_params)
 {
     // COLMAP SYS CALL
     std::string cm_image_path = config_params.at("img_cam");
     system("mkdir .temp_img");
     std::string sys_call = "cp " + cm_image_path + " .temp_img/";
     system(sys_call.c_str());
-    //std::string cm_database_path = "brickseal1_img_cam.db";
+    std::string cm_database_path = ".temp.db";
     //std::cout << cm_database_path << std::endl;
     std::string cm_sys_call = "colmap feature_extractor --database_path " + cm_database_path + " --image_path .temp_img --SiftExtraction.use_gpu 0";
     std::cout << cm_sys_call << std::endl;
@@ -522,9 +524,10 @@ void ColmapSiftFeatures(std::map<std::string,std::string> config_params, std::st
  * @function ColmapSiftKeypoints
  * @brief COLMAP implementation of SIFT keypoints
  */
-std::vector<cv::KeyPoint> ColmapSiftKeypoints(std::string cm_database_path)
+std::vector<cv::KeyPoint> ColmapSiftKeypoints()
 {
     // setup db connection
+    std::string cm_database_path = ".temp.db";
     sqlite3 *db;
     char *zErrMsg = 0;
     int rc;
@@ -597,10 +600,10 @@ std::vector<cv::KeyPoint> ColmapSiftKeypoints(std::string cm_database_path)
  * @function ColmapSiftDescriptors
  * @brief COLMAP implementation of SIFT descriptors
  */
-cv::Mat ColmapSiftDescriptors(std::string cm_database_path)
+cv::Mat ColmapSiftDescriptors()
 {
-
     // setup db connection
+    std::string cm_database_path = ".temp.db";
     sqlite3 *db;
     char *zErrMsg = 0;
     int rc;
@@ -650,4 +653,14 @@ cv::Mat ColmapSiftDescriptors(std::string cm_database_path)
     eigen2cv(img_descriptors, descriptors_cam);
 
     return descriptors_cam;
+}
+
+/**
+ * @function ColmapClean
+ * @brief Clean up disk files of COLMAP processing
+ */
+void ColmapClean()
+{
+    system("rm -rf .temp_img");
+    system("rm .temp.db");
 }
