@@ -341,9 +341,9 @@ int main( int argc, char** argv )
 void readme()
 {
     printf("Usage:\n");
-    printf(" ./main <path_to_points3D.txt> <path_to_database.db>\n");
-    printf(" ./main <path_to_points3D.txt> <path_to_database.db> <path_to_save_serialised_data.txt>\n");
-    printf(" ./main <path_to_load_serialised_data.txt>\n");
+    printf(" ./main <path_to_points3D.txt> <path_to_database.db> <path_to_config.ini>\n");
+    printf(" ./main <path_to_points3D.txt> <path_to_database.db> <path_to_save_serialised_data.txt> <path_to_config.ini>\n");
+    printf(" ./main <path_to_load_serialised_data.txt> <path_to_config.ini>\n");
 
 }
 
