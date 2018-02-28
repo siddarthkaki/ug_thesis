@@ -171,6 +171,9 @@ int main( int argc, char** argv )
     // read in threshold for discriptor "distance" comparison
     float threshold = atof( config_params.at("feature_comparison_max_distance").c_str() );
 
+    // read in ratio value for ratio test
+    float RATIO = atof( config_params.at("ratio").c_str() );
+
     //-- Step 1: Detect the keypoints using SURF/SIFT Detector
     //int min_hessian = atoi( config_params.at("min_hessian").c_str() );
 
@@ -215,16 +218,32 @@ int main( int argc, char** argv )
 
     //-- Step 3: Matching camera and map descriptors using FLANN matcher
     FlannBasedMatcher matcher;
-    //BFMatcher matcher(NORM_L2);
-    std::vector< DMatch > matches;
-    matcher.match( descriptors_cam, descriptors_map, matches );
+    // //BFMatcher matcher(NORM_L2);
+    // std::vector< DMatch > matches;
+    // matcher.match( descriptors_cam, descriptors_map, matches );
+
+    std::vector<std::vector<cv::DMatch>> matches;
+    std::vector<cv::DMatch> ratio_matches;
+    std::vector<cv::DMatch> ratio_failures;
+    //cv::Ptr<cv::FlannBasedMatcher> matcher = cv::FlannBasedMatcher::create();
+    // Find 2 best matches for each descriptor to make later the second neighbor test.
+    matcher.knnMatch(descriptors_cam, descriptors_map, matches, 2);
+
+    // Second neighbor ratio test
+    //float RATIO = 0.75;
+    for (unsigned int i = 0; i < matches.size(); ++i)
+    {
+        if (matches[i][0].distance < matches[i][1].distance * RATIO)
+        { ratio_matches.push_back(matches[i][0]); }
+        else { ratio_failures.push_back(matches[i][0]); }
+    }
 
     double max_dist = 0; double min_dist = 1000;
 
     //-- compute the maximum and minimum distances between matched keypoints
     for( int i = 0; i < descriptors_cam.rows; i++ )
     {
-        double dist = matches[i].distance;
+        double dist = ratio_matches[i].distance;
         if( dist < min_dist ) min_dist = dist;
         if( dist > max_dist ) max_dist = dist;
     }
@@ -236,15 +255,15 @@ int main( int argc, char** argv )
     //-- or a small arbitary value ( 0.02 ) in the event that min_dist is very
     //-- small)
     //-- PS.- radiusMatch can also be used here.
-    std::vector<DMatch> good_matches;
-    std::vector<DMatch>  bad_matches;
+    std::vector<DMatch> good_matches = ratio_matches;
+    std::vector<DMatch>  bad_matches = ratio_failures;
 
-    for( int i = 0; i < descriptors_cam.rows; i++ )
-    {
-        if( matches[i].distance <= max(threshold*min_dist, 0.02) )
-        { good_matches.push_back( matches[i] ); }
-        else { bad_matches.push_back( matches[i] ); }
-    }
+    // for( int i = 0; i < descriptors_cam.rows; i++ )
+    // {
+    //     if( ratio_matches[i].distance <= max(threshold*min_dist, 0.02) )
+    //     { good_matches.push_back( ratio_matches[i] ); }
+    //     else { bad_matches.push_back( ratio_matches[i] ); }
+    // }
 
     //-- find matched keypoints
     std::vector<KeyPoint> obj_keypts = keypoints_cam; // keypoints of changed object / umnatched keypoints

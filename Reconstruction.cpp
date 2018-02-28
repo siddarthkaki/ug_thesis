@@ -120,7 +120,8 @@ void Reconstruction::Load()
 
             }
 
-            point_temp.mean_descriptor = point_temp.point_descriptors.colwise().mean();
+            //point_temp.mean_descriptor = point_temp.point_descriptors.colwise().mean();
+            point_temp.mean_descriptor = point_temp.point_descriptors.block<1,128>(0,0);
             mean_descriptors.block<1,128>(i,0) = point_temp.mean_descriptor;
             //if (i % 1000 == 0) { std::cout << mean_descriptor.transpose() << std::endl; }
 
