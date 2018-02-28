@@ -11,8 +11,8 @@ Point3D::Point3D( unsigned id_arg,
     z = z_arg;
     num_tracks = num_tracks_arg;
 
-    point_descriptors.resize(num_tracks,128);
-    mean_descriptor.resize(128);
+    //point_descriptors.resize(num_tracks,128);
+    point_descriptor.resize(128);
 
     IMAGE_ID.reserve(num_tracks);
     POINT2D_IDX.reserve(num_tracks);

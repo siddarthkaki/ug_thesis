@@ -196,7 +196,7 @@ int main( int argc, char** argv )
 
     // convert Eigen matrix of mean descriptors to CV matrix
     cv::Mat descriptors_map;
-    eigen2cv(recon.mean_descriptors, descriptors_map);
+    eigen2cv(recon.point_descriptors, descriptors_map);
     //eigen2cv(recon.all_descriptors, descriptors_map);
     //cv::Mat vlf_descriptors_map = VLFeatSiftFeatures(img_cam);
 

@@ -28,8 +28,8 @@ class Point3D
 
             ar & num_descriptors;
 
-            ar & point_descriptors;
-            ar & mean_descriptor;
+            ar & point_descriptor;
+            //ar & mean_descriptor;
 
             ar & IMAGE_ID;
             ar & POINT2D_IDX;
@@ -42,8 +42,8 @@ class Point3D
 
         unsigned num_descriptors; // should be same as num_tracks...
 
-        MatrixXi point_descriptors; // all descriptors for this point
-        VectorXi mean_descriptor; // colwise mean of point_descriptors
+        //MatrixXi point_descriptors; // all descriptors for this point
+        VectorXi point_descriptor; // point descriptor
 
         // vectors of TRACK elements
         std::vector<unsigned> IMAGE_ID;

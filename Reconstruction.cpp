@@ -16,7 +16,8 @@ Reconstruction::Reconstruction( std::string points_id_arg,
     printf("Num 3D points: %u\n", num_points);
 
     pos_mat.resize(num_points,3); // matrix of 3D position for each point
-    mean_descriptors.resize(num_points,128); // matrix of mean 128-length SIFT descriptors for each point   
+    //mean_descriptors.resize(num_points,128); // matrix of mean 128-length SIFT descriptors for each point   
+    point_descriptors.resize(num_points,128); // matrix of mean 128-length SIFT descriptors for each point
 }
 
 void Reconstruction::Load()
@@ -42,7 +43,7 @@ void Reconstruction::Load()
         unsigned ind_total_tracks = 0;
 
         // allocate space for entire descriptors matrix
-        all_descriptors.resize(Reconstruction::DescriptorCount(*db),128);
+        //all_descriptors.resize(Reconstruction::DescriptorCount(*db),128);
 
         // skip header comments
         for( unsigned i = 0; i < 3; i++ ) { getline( input_file, curr_line ); }
@@ -80,8 +81,46 @@ void Reconstruction::Load()
             //MatrixXi curr_descriptors(num_tracks,128); // matrix of descriptors for each point
 
             // loop through each image with this point
-            for( unsigned j = 0; j < num_tracks; j++ )
-            {
+            // for( unsigned j = 0; j < num_tracks; j++ )
+            // {
+            //     point_temp.IMAGE_ID.push_back(tokenised_double.at(6+2*(j+1)));
+            //     point_temp.POINT2D_IDX.push_back(tokenised_double.at(7+2*(j+1)));
+
+            //     //if (i % 9213 == 0) { std::cout << "Current IMAGE_ID: " << curr_image_id << std::endl; }
+            //     //if (i % 9213 == 0) { std::cout << "Current POINT2D_IDX: " << curr_point2d_idx << std::endl; }
+
+            //     sqlite3_stmt *stmt;
+            //     std::string zSql = "SELECT * FROM descriptors WHERE image_id=" + std::to_string(point_temp.IMAGE_ID.at(j));
+            //     sqlite3_prepare_v2(db, zSql.c_str(), -1, &stmt, NULL);
+            //     rc = sqlite3_step(stmt);
+                
+            //     if (rc == SQLITE_ROW)
+            //     {
+            //         unsigned curr_num_descriptors = sqlite3_column_int(stmt,1); // get num of descriptors from column 1
+
+            //         // get uint8_t BLOB data from db
+            //         std::vector<char> data( sqlite3_column_bytes(stmt, 3) );
+            //         const char *pBuffer = reinterpret_cast<const char*>( sqlite3_column_blob(stmt, 3) );
+            //         std::copy( pBuffer, pBuffer + data.size(), &data[0] );
+
+            //         unsigned curr_start = point_temp.POINT2D_IDX.at(j)*128; // checked
+            //         unsigned curr_end = curr_start+127; // checked
+
+            //         VectorXi curr_descriptor(128);
+
+            //         for ( unsigned k = 0; k < 128; k++ )
+            //         { curr_descriptor(k) = ( (int) ((uint8_t) data.at(curr_start + k)) ); }
+
+            //         point_temp.point_descriptors.block<1,128>(j,0) = curr_descriptor;
+            //         all_descriptors.block<1,128>(ind_total_tracks,0) = curr_descriptor;
+            //     }
+
+            //     rc = sqlite3_finalize(stmt);
+
+            //     ind_total_tracks++;
+            // }
+
+                unsigned j = 0;
                 point_temp.IMAGE_ID.push_back(tokenised_double.at(6+2*(j+1)));
                 point_temp.POINT2D_IDX.push_back(tokenised_double.at(7+2*(j+1)));
 
@@ -110,19 +149,17 @@ void Reconstruction::Load()
                     for ( unsigned k = 0; k < 128; k++ )
                     { curr_descriptor(k) = ( (int) ((uint8_t) data.at(curr_start + k)) ); }
 
-                    point_temp.point_descriptors.block<1,128>(j,0) = curr_descriptor;
-                    all_descriptors.block<1,128>(ind_total_tracks,0) = curr_descriptor;
+                    point_temp.point_descriptor = curr_descriptor;
+
+                    //point_temp.point_descriptors.block<1,128>(j,0) = curr_descriptor;
+                    //all_descriptors.block<1,128>(ind_total_tracks,0) = curr_descriptor;
                 }
 
                 rc = sqlite3_finalize(stmt);
 
-                ind_total_tracks++;
-
-            }
-
             //point_temp.mean_descriptor = point_temp.point_descriptors.colwise().mean();
-            point_temp.mean_descriptor = point_temp.point_descriptors.block<1,128>(0,0);
-            mean_descriptors.block<1,128>(i,0) = point_temp.mean_descriptor;
+             //point_temp.point_descriptors.block<1,128>(0,0);
+            point_descriptors.block<1,128>(i,0) = point_temp.point_descriptor;
             //if (i % 1000 == 0) { std::cout << mean_descriptor.transpose() << std::endl; }
 
             points.push_back(point_temp);

@@ -35,8 +35,9 @@ class Reconstruction
             ar & num_points;
 
             ar & pos_mat;
-            ar & mean_descriptors;
-            ar & all_descriptors;
+            //ar & mean_descriptors;
+            //ar & all_descriptors;
+            ar & point_descriptors;
 
             ar & points;
         }
@@ -47,8 +48,9 @@ class Reconstruction
         unsigned num_points;
 
         MatrixXd pos_mat; // matrix of 3D position for each point
-        MatrixXi mean_descriptors; // matrix of mean 128-length SIFT descriptors for each point
-        MatrixXi all_descriptors; // matrix of all 128-length SIFT descriptors for each point
+        MatrixXi point_descriptors;
+        //MatrixXi mean_descriptors; // matrix of mean 128-length SIFT descriptors for each point
+        //MatrixXi all_descriptors; // matrix of all 128-length SIFT descriptors for each point
 
         std::vector<Point3D> points;
 
