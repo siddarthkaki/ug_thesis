@@ -67,7 +67,7 @@ int main( int argc, char** argv )
         config_params_str = argv[2];
     }
 
-    // inputs: points3D.txt and database.db
+    // inputs: points3D.txt, database.db, & config params file
     else if( argc == 4 )
     {
         // new Reconstruction object
@@ -76,11 +76,12 @@ int main( int argc, char** argv )
 
         recon = temp;
 
-        // load data from points3D.txt and database.db
+        // load data from points3D.txt & database.db
         recon.Load();
     }
 
-    // inputs: points3D.txt, database.db, and file to save serialised data to
+    // inputs: points3D.txt, database.db, file to save serialised data to,
+    //         & config params file
     else if( argc == 5 )
     {
         // new Reconstruction object
@@ -102,70 +103,16 @@ int main( int argc, char** argv )
     printf ("Loading time: %f seconds\n",((float)t)/CLOCKS_PER_SEC);
 
 
-
-    //-- projection --/////////////////////////////////////////////////////////
-
-    // start clock
-    t = clock();
-
-    // camera parameters
-    unsigned image_size_x = 1000, focal_length_x = 500, 
-             image_size_y = 1000, focal_length_y = 500,
-             skew = 0;
-
-    // camera intrinsics matrix
-    cv::Mat cam_mat = (Mat_<double>(3,3) <<  
-                               focal_length_x,           skew, image_size_x/2,
-                                            0, focal_length_y, image_size_y/2,
-                                            0,              0,              1);
-
-    // IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME
-    // 1 0.0463085 0.0926584 0.817966 0.565863 -0.743449 -3.23341 7.8009 1 frame00038.jpg
-
-    // DCM for camera extrinsics
-    cv::Mat rot_mat = (Mat_<double>(3,3) <<
-                        1, 0, 0,
-                        0, 1, 0,
-                        0, 0, 1);
-    cv::Mat rvec;
-    Rodrigues(rot_mat, rvec);
-    
-    //std::cout << rvec << std::endl;
-
-    // translation vector for camera extrinsics   
-    cv::Mat tvec = (Mat_<double>(3,1) << -0.743449, -3.23341, 7.8009);
-
-    // distortion cooefficients vector; no distortion
-    cv::Mat dist_coeffs;
-
-    // matrix for projected points
-    cv::Mat proj_pos;
-
-    // convert Eigen matrix of 3D point cloud to CV matrix
-    cv::Mat pos_mat_cv;
-    eigen2cv(recon.pos_mat, pos_mat_cv);
-
-    // project 3D point cloud to 2D camera view
-    projectPoints(pos_mat_cv, rvec, tvec, cam_mat, dist_coeffs, proj_pos);
-
-    //std::cout << proj_pos << std::endl;
-
-    // stop clock
-    t = clock() - t;
-    printf ("Projection time: %f seconds\n",((float)t)/CLOCKS_PER_SEC);
-
-
-    //-- auto_cropper --///////////////////////////////////////////////////////
+    //-- feature correlation --////////////////////////////////////////////////
 
     // start clock
     t = clock();
 
-    // read in config file - TODO read from command argument
+    // read in config file
     std::map<std::string,std::string> config_params = LoadConfig(config_params_str);
 
     // read in camera image to compare to map
     cv::Mat img_cam = imread( config_params.at("img_cam"), CV_LOAD_IMAGE_GRAYSCALE );
-
     if( !img_cam.data ) { printf(" --(!) Error reading image \n"); return -1; }
 
     // read in threshold for discriptor "distance" comparison
@@ -174,20 +121,7 @@ int main( int argc, char** argv )
     // read in ratio value for ratio test
     float RATIO = atof( config_params.at("ratio").c_str() );
 
-    //-- Step 1: Detect the keypoints using SURF/SIFT Detector
-    //int min_hessian = atoi( config_params.at("min_hessian").c_str() );
-
-    //SiftFeatureDetector detector( min_hessian );
-    // TODO - check if keypoints_map is actually needed
-    //std::vector<cv::KeyPoint> keypoints_cam, keypoints_map;
-    //detector.detect( img_cam, keypoints_cam );
-
-    //-- Step 2: Calculate descriptors (feature vectors)
-    //SiftDescriptorExtractor extractor;
-    //cv::Mat descriptors_cam;
-    //extractor.compute( img_cam, keypoints_cam, descriptors_cam );
-
-    //std::string cm_database_path = "brickseal1_img_cam.db";
+    // process new camera image with COLMAP
     ColmapImg cm_img(config_params);
     cm_img.ColmapSiftFeatures();
     std::vector<cv::KeyPoint> keypoints_cam = cm_img.ColmapSiftKeypoints();
@@ -197,40 +131,28 @@ int main( int argc, char** argv )
     // convert Eigen matrix of mean descriptors to CV matrix
     cv::Mat descriptors_map;
     eigen2cv(recon.point_descriptors, descriptors_map);
-    //eigen2cv(recon.all_descriptors, descriptors_map);
-    //cv::Mat vlf_descriptors_map = VLFeatSiftFeatures(img_cam);
 
+    // output number of descriptors
     std::cout << "COLMAP Cam SIFT Size: " << descriptors_cam.size() << std::endl;
     std::cout << "COLMAP Map SIFT Size: " << descriptors_map.size() << std::endl;
-    //std::cout << "   VLF Map SIFT Size: " << vlf_descriptors_map.size() << std::endl;
-
-
-    //std::cout << "Cam Descriptors:\n" << descriptors_cam << std::endl;
-    //std::cout << "Map Descriptors:\n" << descriptors_map << std::endl;
 
     // convert descriptor matrices to CV_32F format if needed
     if( descriptors_cam.type() != CV_32F )
     { descriptors_cam.convertTo(descriptors_cam, CV_32F); }
     if( descriptors_map.type() != CV_32F )
     { descriptors_map.convertTo(descriptors_map, CV_32F); }
-    //if( vlf_descriptors_map.type() != CV_32F )
-    //{ vlf_descriptors_map.convertTo(vlf_descriptors_map, CV_32F); }
 
-    //-- Step 3: Matching camera and map descriptors using FLANN matcher
+    //-- match camera and map descriptors using FLANN matcher
     FlannBasedMatcher matcher;
-    // //BFMatcher matcher(NORM_L2);
-    // std::vector< DMatch > matches;
-    // matcher.match( descriptors_cam, descriptors_map, matches );
 
     std::vector<std::vector<cv::DMatch>> matches;
     std::vector<cv::DMatch> ratio_matches;
     std::vector<cv::DMatch> ratio_failures;
-    //cv::Ptr<cv::FlannBasedMatcher> matcher = cv::FlannBasedMatcher::create();
-    // Find 2 best matches for each descriptor to make later the second neighbor test.
+
+    // find 2 best matches for each descriptor; latter is for ratio test
     matcher.knnMatch(descriptors_cam, descriptors_map, matches, 2);
 
-    // Second neighbor ratio test
-    //float RATIO = 0.75;
+    //-- second neighbor ratio test
     for (unsigned int i = 0; i < matches.size(); ++i)
     {
         if (matches[i][0].distance < matches[i][1].distance * RATIO)
@@ -251,41 +173,99 @@ int main( int argc, char** argv )
     printf("-- Max dist : %f \n", max_dist );
     printf("-- Min dist : %f \n", min_dist );
 
-    //-- Draw only "good" matches (i.e. whose distance is less than 2*min_dist,
-    //-- or a small arbitary value ( 0.02 ) in the event that min_dist is very
-    //-- small)
-    //-- PS.- radiusMatch can also be used here.
     std::vector<DMatch> good_matches = ratio_matches;
     std::vector<DMatch>  bad_matches = ratio_failures;
-
-    // for( int i = 0; i < descriptors_cam.rows; i++ )
-    // {
-    //     if( ratio_matches[i].distance <= max(threshold*min_dist, 0.02) )
-    //     { good_matches.push_back( ratio_matches[i] ); }
-    //     else { bad_matches.push_back( ratio_matches[i] ); }
-    // }
 
     //-- find matched keypoints
     std::vector<KeyPoint> obj_keypts = keypoints_cam; // keypoints of changed object / umnatched keypoints
     std::vector<KeyPoint> matched_keypts; // keypoints of matched objects
+    
+    std::vector<Point2f> list_points2d_scene_match; // container for the model 2D coordinates found in the scene
+    std::vector<Point3f> list_points3d_model_match; // container for the model 3D coordinates found in the scene
 
     for( int i = good_matches.size()-1; i >= 0; i-- )
     {
+        float xf = recon.points.at(good_matches[i].trainIdx).x;
+        float yf = recon.points.at(good_matches[i].trainIdx).y;
+        float zf = recon.points.at(good_matches[i].trainIdx).z;
+        Point3f point3d_model( xf, yf, zf ); // 3D point from model
+        Point2f point2d_scene = keypoints_cam[ good_matches[i].queryIdx ].pt;  // 2D point from the scene
+        list_points3d_model_match.push_back( point3d_model ); // add 3D point
+        list_points2d_scene_match.push_back( point2d_scene ); // add 2D point
+
         matched_keypts.push_back( keypoints_cam[ good_matches[i].queryIdx ] );
         obj_keypts.erase( obj_keypts.begin() + good_matches[i].queryIdx );
     }
-
-    //-- cluster remaining unmatched keypoints
-    float eps = atof( config_params.at("cluster_eps").c_str() );;
-    int min_pts = atoi( config_params.at("cluster_min_pts").c_str() );
-    std::vector< std::vector<KeyPoint> > point_clusters = DBSCAN_keypoints( &obj_keypts, eps, min_pts );
-
 
     //-- debug output
     printf("\n----Total Keypoints : %lu\n", keypoints_cam.size());
     printf("--Matched Keypoints : %lu\n", matched_keypts.size());
     printf("---Object Keypoints : %lu\n\n", obj_keypts.size());
 
+    //-- TODO matched_keypts
+    //   With matched keypoints, perform PNP-RANSAC to estimate cam pose wrt
+    //   map. Next, project map wrt to this pose. Finally, perform directed
+    //   search to localise new objects.
+
+    
+
+    //-- Camera Params --//////////////////////////////////////////////////////
+    // camera parameters - TODO retrieve from COLMAP
+    unsigned image_size_x = 4032, focal_length_x = 4838.4, 
+             image_size_y = 3024, focal_length_y = 4838.4,
+             skew = 0;
+
+    // camera intrinsics matrix
+    cv::Mat cam_mat = (Mat_<double>(3,3) <<  
+                               focal_length_x,           skew, image_size_x/2,
+                                            0, focal_length_y, image_size_y/2,
+                                            0,              0,              1);
+    
+    //-- RANSAC --/////////////////////////////////////////////////////////////
+    cv::Mat dist_coeffs; // distortion cooefficients vector; no distortion
+    
+    // camera extrinsics
+    cv::Mat rvec;
+    cv::Mat tvec;
+
+    cv::solvePnPRansac( list_points3d_model_match, list_points2d_scene_match, cam_mat, dist_coeffs, rvec, tvec, false, 100, 8.0, 100 );
+
+    cv::Mat rot_mat;
+    cv::Rodrigues(rvec, rot_mat);
+
+    std::cout << " DCM: " << rot_mat << std::endl;
+    std::cout << "tvec: " << tvec    << std::endl;
+
+    //-- projection --/////////////////////////////////////////////////////////
+
+    // IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME
+    // 1 0.0463085 0.0926584 0.817966 0.565863 -0.743449 -3.23341 7.8009 1 frame00038.jpg
+    
+    // // translation vector for camera extrinsics   
+    // cv::Mat tvec = (Mat_<double>(3,1) << -0.743449, -3.23341, 7.8009);
+
+    // matrix for projected points
+    cv::Mat proj_pos;
+
+    // convert Eigen matrix of 3D point cloud to CV matrix
+    cv::Mat pos_mat_cv;
+    eigen2cv(recon.pos_mat, pos_mat_cv);
+
+    // project 3D point cloud to 2D camera view
+    projectPoints(pos_mat_cv, rvec, tvec, cam_mat, dist_coeffs, proj_pos);
+
+    //std::cout << proj_pos << std::endl;
+
+    
+    //-- clustering --/////////////////////////////////////////////////////////
+
+    // start clock
+    t = clock();
+
+    //-- cluster remaining unmatched keypoints
+    float eps = atof( config_params.at("cluster_eps").c_str() );;
+    int min_pts = atoi( config_params.at("cluster_min_pts").c_str() );
+    std::vector< std::vector<KeyPoint> > point_clusters = DBSCAN_keypoints( &obj_keypts, eps, min_pts );
 
     //-- image display output
     if(1)
@@ -302,16 +282,11 @@ int main( int argc, char** argv )
         imshow( "All Keypoints", out_img_3 );
     }
 
-
-
-
     Mat img_cam_rgb = imread( config_params.at("img_cam"), CV_LOAD_IMAGE_COLOR ); // camera image in colour
-
     std::string output_dir = config_params.at("output_dir").c_str();
-
     std::string dataset_id = config_params.at("id").c_str();
 
-    //-- Clustered KeyPoints image display output
+    //-- clustered KeyPoints image display output
     for (int i = 0; i < point_clusters.size(); i++)
     {
 
@@ -344,7 +319,7 @@ int main( int argc, char** argv )
 
     // stop clock
     t = clock() - t;
-    printf ("Cropping time: %f seconds\n",((float)t)/CLOCKS_PER_SEC);
+    printf ("Clustering time: %f seconds\n",((float)t)/CLOCKS_PER_SEC);
 
     waitKey(0);
     return 0;
