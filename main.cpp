@@ -177,7 +177,7 @@ int main( int argc, char** argv )
     std::vector<DMatch>  bad_matches = ratio_failures;
 
     //-- find matched keypoints
-    std::vector<KeyPoint> obj_keypts = keypoints_cam; // keypoints of changed object / umnatched keypoints
+    //std::vector<KeyPoint> obj_keypts = keypoints_cam; // keypoints of changed object / umnatched keypoints
     std::vector<KeyPoint> matched_keypts; // keypoints of matched objects
     
     std::vector<Point2f> list_points2d_scene_match; // container for the model 2D coordinates found in the scene
@@ -194,19 +194,13 @@ int main( int argc, char** argv )
         list_points2d_scene_match.push_back( point2d_scene ); // add 2D point
 
         matched_keypts.push_back( keypoints_cam[ good_matches[i].queryIdx ] );
-        obj_keypts.erase( obj_keypts.begin() + good_matches[i].queryIdx );
+        //obj_keypts.erase( obj_keypts.begin() + good_matches[i].queryIdx );
     }
 
     //-- debug output
-    printf("\n----Total Keypoints : %lu\n", keypoints_cam.size());
-    printf("--Matched Keypoints : %lu\n", matched_keypts.size());
-    printf("---Object Keypoints : %lu\n\n", obj_keypts.size());
-
-    //-- TODO matched_keypts
-    //   With matched keypoints, perform PNP-RANSAC to estimate cam pose wrt
-    //   map. Next, project map wrt to this pose. Finally, perform directed
-    //   search to localise new objects.
-
+    //printf("\n----Total Keypoints : %lu\n", keypoints_cam.size());
+    //printf("--Matched Keypoints : %lu\n", matched_keypts.size());
+    //printf("---Object Keypoints : %lu\n\n", obj_keypts.size());
     
 
     //-- Camera Params --//////////////////////////////////////////////////////
@@ -249,12 +243,84 @@ int main( int argc, char** argv )
 
     // convert Eigen matrix of 3D point cloud to CV matrix
     cv::Mat pos_mat_cv;
-    eigen2cv(recon.pos_mat, pos_mat_cv);
+    cv::eigen2cv( recon.pos_mat, pos_mat_cv );
 
     // project 3D point cloud to 2D camera view
-    projectPoints(pos_mat_cv, rvec, tvec, cam_mat, dist_coeffs, proj_pos);
+    cv::projectPoints( pos_mat_cv, rvec, tvec, cam_mat, dist_coeffs, proj_pos );
 
-    //std::cout << proj_pos << std::endl;
+
+    //-- directed search --////////////////////////////////////////////////////
+
+    //-- match camera and map descriptors using FLANN matcher
+    FlannBasedMatcher matcher2;
+
+    std::vector<cv::DMatch> ratio_matches2;
+    std::vector<cv::DMatch> ratio_failures2;
+    std::vector<cv::KeyPoint> obj_keypts;
+
+
+    // loop through each camera image point
+    for ( unsigned i = 0; i < keypoints_cam.size(); i++ )
+    {
+        std::vector<std::vector<cv::DMatch>> matches2;
+
+        // extract pixel coordinates
+        float cam_x = keypoints_cam.at(i).pt.x;
+        float cam_y = keypoints_cam.at(i).pt.y;
+
+        std::vector<unsigned> map_region_idx;
+        cv::Mat descriptors_region_cam;
+        cv::Mat descriptors_region_map;
+
+        descriptors_region_cam.push_back( descriptors_cam.row(i) );
+
+        // check whether each projected map point is within viscinity of camera point
+        for ( unsigned j = 0; j < proj_pos.rows; j++ )
+        {
+            float map_x = proj_pos.at<float>(j,0);
+            float map_y = proj_pos.at<float>(j,1);
+
+            float dist = sqrt( pow((cam_x - map_x),2) + pow((cam_y - map_y),2) );
+            float eps = 0.05*image_size_x;
+
+            if( dist <= eps && dist != 0.0f )
+            {
+                map_region_idx.push_back(j);
+                descriptors_region_map.push_back( descriptors_map.row(j) );
+            }
+        }
+
+        if ( !descriptors_region_map.empty() && descriptors_region_map.rows >= 2 )
+        {
+            // find 2 best matches for each descriptor; latter is for ratio test
+            matcher2.knnMatch(descriptors_region_cam, descriptors_region_map, matches2, 2);
+
+            //-- second neighbor ratio test
+            for ( unsigned k = 0; k < matches2.size(); k++ )
+            {
+                if ( matches2[k][0].distance < matches2[k][1].distance * 0.9 )
+                {
+                    ratio_matches2.push_back( matches2[k][0] );
+                }
+                else
+                {
+                    ratio_failures2.push_back( matches2[k][0] );
+                    obj_keypts.push_back( keypoints_cam.at(i) );    
+                }
+            }
+        }
+        else { obj_keypts.push_back( keypoints_cam.at(i) ); }
+    }
+
+    //-- debug output
+    printf("\n----Total Keypoints : %lu\n", keypoints_cam.size());
+    printf("--Matched Keypoints : %lu\n", keypoints_cam.size() - obj_keypts.size());
+    printf("---Object Keypoints : %lu\n\n", obj_keypts.size());
+
+    // stop clock
+    t = clock() - t;
+    printf ("Feature correlation time: %f seconds\n",((float)t)/CLOCKS_PER_SEC);
+
 
     
     //-- clustering --/////////////////////////////////////////////////////////
@@ -287,7 +353,7 @@ int main( int argc, char** argv )
     std::string dataset_id = config_params.at("id").c_str();
 
     //-- clustered KeyPoints image display output
-    for (int i = 0; i < point_clusters.size(); i++)
+    for ( unsigned i = 0; i < point_clusters.size(); i++ )
     {
 
         std::vector<KeyPoint> current_cluster = point_clusters[i];
@@ -298,7 +364,7 @@ int main( int argc, char** argv )
 
         int min_size = atoi( config_params.at("cluster_min_size").c_str() );
 
-        if (current_cluster_size > min_size)
+        if ( current_cluster_size > min_size )
         {
 
             Rect ROI = BoundingBox( &img_cam, &current_cluster );
