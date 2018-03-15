@@ -159,15 +159,6 @@ else
     isolated(indexPairs(:,1),:) = [];
 end
 
-%% dbscan clustering
-% addpath dbscan
-% epsilon = 0.9;
-% MinPts = 50;
-% IDX = DBSCAN(isolated,epsilon,MinPts);
-% PlotClusterinResult(isolated, IDX);
-% title(['DBSCAN Clustering (\epsilon = ' num2str(epsilon) ', MinPts = ' num2str(MinPts) ')']);
-% rmpath dbscan
-
 %% visualise object localisation
 figure,
 subplot(1,2,1)
@@ -205,13 +196,51 @@ subplot(1,2,2)
 scatter(projected(:,1),projected(:,2),'b');%,20,projected(:,3:5),'fill')
 axis equal
 grid on
-title('Camera View with New Object Localised')
+title('Camera View with Deltas')
 xlabel('X (pixels)')
 ylabel('Y (pixels)')
 hold on
 scatter(isolated(:,1),isolated(:,2),'r');
 xlim([0,image_size_x]);
 ylim([0,image_size_y]);
+
+%% k-means clustering
+% k = 2;
+% [idx,C] = kmeans(isolated,k);
+% 
+% idx1 = find(idx == 1);
+% idx2 = find(idx == 2);
+% %idx3 = find(idx == 3);
+
+%% dbscan clustering
+addpath dbscan
+epsilon = 0.1;
+MinPts = 15;
+IDX = DBSCAN(isolated/1000,epsilon,MinPts);
+PlotClusterinResult(isolated/1000, IDX);
+xlabel('X (megapixels)')
+ylabel('Y (megapixels)')
+xlim([0,image_size_x/1000]);
+ylim([0,image_size_y/1000]);
+title(['DBSCAN Clustering (\epsilon = ' num2str(epsilon) ', MinPts = ' num2str(MinPts) ')']);
+rmpath dbscan
+
+%% object localisation visualisation
+% figure,
+% scatter(isolated(idx1,1),isolated(idx1,2),'r');
+% hold on
+% axis equal
+% grid on
+% scatter(isolated(idx2,1),isolated(idx2,2),'b');
+% %scatter(isolated(idx3,1),isolated(idx3,2),'b');
+% xlim([0,image_size_x]);
+% ylim([0,image_size_y]);
+% title('Scene Segmentation')
+% xlabel('X (pixels)')
+% ylabel('Y (pixels)')
+% xlim([0,image_size_x]);
+% ylim([0,image_size_y]);
+
 
 %% save to txt and db
 % 
