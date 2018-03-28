@@ -1,20 +1,18 @@
 %% Siddarth Kaki - Thesis
 
 %% housekeeping
-clear
-close all
-clc
+clear; close all; clc;
 
 %% open db connection
-db_file_id = fullfile(pwd, '../data/database2.db');
-db = com.almworks.sqlite4java.SQLiteConnection(java.io.File(db_file_id));
-db.open;
+% db_file_id = fullfile(pwd, '../data/database2.db');
+% db = com.almworks.sqlite4java.SQLiteConnection(java.io.File(db_file_id));
+% db.open;
 
 %% read in 3D points
 
-pc_file_id = fullfile(pwd, '../data/sparse/0/points3D.txt');
+pc_file_id = fullfile(pwd, '../data/sparse/0/points3D_fix.txt');
 
-num_points = 5;%linecount(pc_file_id) - 3;
+num_points = linecount(pc_file_id) - 3;
 
 pos = zeros(num_points, 3);
 
@@ -29,31 +27,31 @@ for i = 1:num_points,
     curr_pos = curr_line(2:4); % X,Y,Z
     pos(i,1:3) = curr_pos;
     
-    num_tracks = (length(curr_line) - 8)/2; % number of images with this point
-    
-    curr_descriptors = zeros(num_tracks,128);
-    
-    % loop through each image with this point
-    for j = 1:num_tracks,
-        curr_image_id = curr_line(7+2*j); % IMAGE_ID
-        curr_point2d_idx = curr_line(8+2*j); % POINT2D_IDX
-                
-        %st = db.prepare(['SELECT * FROM cameras'])
-        st = db.prepare(['SELECT * FROM descriptors WHERE image_id=' num2str(curr_image_id)]);
-        while st.step,
-            % returning the data type from the desired column
-            curr_num_descriptors = st.columnInt(1); % get num of descriptors from column 1
-            curr_descriptors_blob = st.columnBlob(3); % get descriptors blob from column 3
-            
-            curr_start = (curr_point2d_idx-1)*128+1;
-            curr_end = curr_start+127;
-            curr_descriptor = curr_descriptors_blob(curr_start:curr_end);
-            
-            curr_descriptors(j,:) = curr_descriptor;
-        end
-    end
-    
-    mean_descriptors(i,:) = mean(curr_descriptors,1);
+%     num_tracks = (length(curr_line) - 8)/2; % number of images with this point
+%     
+%     curr_descriptors = zeros(num_tracks,128);
+%     
+%     % loop through each image with this point
+%     for j = 1:num_tracks,
+%         curr_image_id = curr_line(7+2*j); % IMAGE_ID
+%         curr_point2d_idx = curr_line(8+2*j); % POINT2D_IDX
+%                 
+%         %st = db.prepare(['SELECT * FROM cameras'])
+%         st = db.prepare(['SELECT * FROM descriptors WHERE image_id=' num2str(curr_image_id)]);
+%         while st.step,
+%             % returning the data type from the desired column
+%             curr_num_descriptors = st.columnInt(1); % get num of descriptors from column 1
+%             curr_descriptors_blob = st.columnBlob(3); % get descriptors blob from column 3
+%             
+%             curr_start = (curr_point2d_idx-1)*128+1;
+%             curr_end = curr_start+127;
+%             curr_descriptor = curr_descriptors_blob(curr_start:curr_end);
+%             
+%             curr_descriptors(j,:) = curr_descriptor;
+%         end
+%     end
+%     
+%     mean_descriptors(i,:) = mean(curr_descriptors,1);
     
 end
 toc
@@ -65,11 +63,11 @@ points = pos;
 
 %% projection
 
-image_size_x = 1000;
-image_size_y = 1000;
+image_size_x = 4032;
+image_size_y = 3024;
 
-focal_length_x = 500; %image_size_x / 2;
-focal_length_y = 500; %image_size_y / 2;
+focal_length_x = 4838.4; %image_size_x / 2;
+focal_length_y = 4838.4; %image_size_y / 2;
 
 skew = 0;
 
@@ -86,8 +84,12 @@ angles = deg2rad([5,-5,75]);
 %angles = deg2rad([0,0,0]);
 position = [-1,-4,5];
 position = [-0.743449, -3.23341, 7.8009];
+position = [-0.540707276541575,-1.443508861309167, 9.377850391746321];
+dcm = [-0.3151025836926599, -0.4698286571043252, 0.8246037804386764;
+        0.3746034626970745, 0.7367473357271332, 0.5629170534229119;
+       -0.8719992015395267, 0.486276049443645, -0.05615154719070636];
 tform = eye(4);
-%tform(1:3,1:3) = angle2dcm(angles);
+tform(1:3,1:3) = dcm;%angle2dcm(angles);
 tform(1:3,4) = position;
 
 % lense distortion
@@ -112,10 +114,10 @@ axis equal
 title('Points projected with camera model')
 
 %% dispose st connection
-% disposed of used up statement container
-st.dispose
-st.isDisposed
- 
-%% dispose db connection
-db.dispose;
-db.isDisposed
+% % disposed of used up statement container
+% st.dispose
+% st.isDisposed
+%  
+% %% dispose db connection
+% db.dispose;
+% db.isDisposed

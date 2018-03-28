@@ -38,6 +38,7 @@ using Eigen::MatrixXi;
 using Eigen::VectorXd;
 using Eigen::VectorXi;
 using Eigen::Vector3d;
+using Eigen::Quaterniond;
 
 void readme();
 std::map<std::string,std::string> LoadConfig(std::string filename);
@@ -205,8 +206,8 @@ int main( int argc, char** argv )
 
     //-- Camera Params --//////////////////////////////////////////////////////
     // camera parameters - TODO retrieve from COLMAP
-    unsigned image_size_x = 4032, focal_length_x = 4838.4, 
-             image_size_y = 3024, focal_length_y = 4838.4,
+    unsigned image_size_x = 3840, focal_length_x = 4608, 
+             image_size_y = 2160, focal_length_y = 4608,
              skew = 0;
 
     // camera intrinsics matrix
@@ -218,25 +219,32 @@ int main( int argc, char** argv )
     //-- RANSAC --/////////////////////////////////////////////////////////////
     cv::Mat dist_coeffs; // distortion cooefficients vector; no distortion
     
-    // camera extrinsics
-    cv::Mat rvec;
-    cv::Mat tvec;
+    // frame00028.jpg -742016.091684 -5462219.213604 3198015.466386 0.684449 0.563692 0.383701 -0.257981
+    Quaterniond rot(0.684449, 0.563692, 0.383701, -0.257981);
+    Matrix3d rot_mat_eigen2;
+    rot_mat_eigen2 = rot.toRotationMatrix();
+    Matrix3d rot_mat_eigen = rot_mat_eigen2;//.transpose();
 
-    cv::solvePnPRansac( list_points3d_model_match, list_points2d_scene_match, cam_mat, dist_coeffs, rvec, tvec, false, 100, 8.0, 100 );
+    Vector3d tvec_eigen(-742016.091684, -5462219.213604, 3198015.466386);
 
     cv::Mat rot_mat;
-    cv::Rodrigues(rvec, rot_mat);
+    cv::Mat tvec;
+    eigen2cv(rot_mat_eigen, rot_mat);
+    eigen2cv(tvec_eigen, tvec);
+
+    // camera extrinsics
+    cv::Mat rvec;
+    //cv::Mat tvec;
+
+    //cv::solvePnPRansac( list_points3d_model_match, list_points2d_scene_match, cam_mat, dist_coeffs, rvec, tvec, false, 100, 8.0, 100 );
+
+    //cv::Mat rot_mat;
+    cv::Rodrigues(rot_mat, rvec);
 
     std::cout << " DCM: " << rot_mat << std::endl;
     std::cout << "tvec: " << tvec    << std::endl;
 
     //-- projection --/////////////////////////////////////////////////////////
-
-    // IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME
-    // 1 0.0463085 0.0926584 0.817966 0.565863 -0.743449 -3.23341 7.8009 1 frame00038.jpg
-    
-    // // translation vector for camera extrinsics   
-    // cv::Mat tvec = (Mat_<double>(3,1) << -0.743449, -3.23341, 7.8009);
 
     // matrix for projected points
     cv::Mat proj_pos;
@@ -281,7 +289,7 @@ int main( int argc, char** argv )
             float map_y = proj_pos.at<float>(j,1);
 
             float dist = sqrt( pow((cam_x - map_x),2) + pow((cam_y - map_y),2) );
-            float eps = 0.05*image_size_x;
+            float eps = 0.1*image_size_x;
 
             if( dist <= eps && dist != 0.0f )
             {
@@ -339,12 +347,15 @@ int main( int argc, char** argv )
         Mat out_img_1, out_img_2, out_img_3;
 
         drawKeypoints(img_cam, obj_keypts, out_img_1, Scalar::all(-1), DrawMatchesFlags::DEFAULT);
+        namedWindow("Object localisation", WINDOW_NORMAL);
         imshow( "Object localisation", out_img_1 );
 
         drawKeypoints(img_cam, matched_keypts, out_img_2, Scalar::all(-1), DrawMatchesFlags::DEFAULT);
+        namedWindow("Matched Keypoints", WINDOW_NORMAL);
         imshow( "Matched Keypoints", out_img_2 );
 
         drawKeypoints(img_cam, keypoints_cam, out_img_3, Scalar::all(-1), DrawMatchesFlags::DEFAULT);
+        namedWindow("All Keypoints", WINDOW_NORMAL);
         imshow( "All Keypoints", out_img_3 );
     }
 

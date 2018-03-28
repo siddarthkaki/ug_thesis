@@ -60,7 +60,7 @@ zlabel('Z (m)')
 grid on
 hold on
 scatter3(objX,objY,objZ,'r')
-title('Map with New Object')
+title('Environment with New Object')
 
 %% insert object into environment
 
@@ -175,7 +175,7 @@ subplot(1,2,2)
 scatter(projected(:,1),projected(:,2),'b');%,20,projected(:,3:5),'fill')
 axis equal
 grid on
-title('Camera View')
+title('Simulated Camera View')
 xlabel('X (pixels)')
 ylabel('Y (pixels)')
 xlim([0,image_size_x]);
@@ -196,7 +196,7 @@ subplot(1,2,2)
 scatter(projected(:,1),projected(:,2),'b');%,20,projected(:,3:5),'fill')
 axis equal
 grid on
-title('Camera View with Deltas')
+title('Simulated Camera View with Deltas')
 xlabel('X (pixels)')
 ylabel('Y (pixels)')
 hold on

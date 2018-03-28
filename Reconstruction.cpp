@@ -69,7 +69,7 @@ void Reconstruction::Load()
             pos_mat(i,1) = tokenised_double.at(2); // Y pos
             pos_mat(i,2) = tokenised_double.at(3); // Z pos
 
-            unsigned num_tracks = (tokenised_double.size() - 8)/2; // number of images with this point
+            unsigned num_tracks = (tokenised_double.size() - 8 - 9)/2; // number of images with this point
 
             // create new Point3D object
             Point3D point_temp( tokenised_double.at(0),
@@ -121,8 +121,8 @@ void Reconstruction::Load()
             // }
 
                 unsigned j = 0;
-                point_temp.IMAGE_ID.push_back(tokenised_double.at(6+2*(j+1)));
-                point_temp.POINT2D_IDX.push_back(tokenised_double.at(7+2*(j+1)));
+                point_temp.IMAGE_ID.push_back(tokenised_double.at(6+9+2*(j+1)));
+                point_temp.POINT2D_IDX.push_back(tokenised_double.at(7+9+2*(j+1)));
 
                 //if (i % 9213 == 0) { std::cout << "Current IMAGE_ID: " << curr_image_id << std::endl; }
                 //if (i % 9213 == 0) { std::cout << "Current POINT2D_IDX: " << curr_point2d_idx << std::endl; }
