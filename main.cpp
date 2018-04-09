@@ -25,6 +25,8 @@
 #include "opencv2/features2d/features2d.hpp"
 #include "opencv2/nonfree/nonfree.hpp"
 #include "opencv2/nonfree/features2d.hpp"
+//#include "matplotlibcpp.h"
+//#include "opencv2/nonfree/plot.hpp"
 //#include "opencv2/xfeatures2d/nonfree.hpp"
 
 #include "Reconstruction.h"
@@ -45,6 +47,7 @@ std::map<std::string,std::string> LoadConfig(std::string filename);
 Rect BoundingBox(Mat *img_cam, std::vector<KeyPoint> *keypoints);
 std::vector< std::vector<KeyPoint> > DBSCAN_keypoints(std::vector<KeyPoint> *keypoints, float eps, int min_pts);
 std::vector<int> RegionQuery(std::vector<KeyPoint> *keypoints, KeyPoint *keypoint, float eps);
+void writeEigenToCSV(std::string name, MatrixXd matrix);
 
 /**
  * @function main
@@ -206,40 +209,64 @@ int main( int argc, char** argv )
 
     //-- Camera Params --//////////////////////////////////////////////////////
     // camera parameters - TODO retrieve from COLMAP
-    unsigned image_size_x = 3840, focal_length_x = 4608, 
-             image_size_y = 2160, focal_length_y = 4608,
+    unsigned image_size_x = 3840, focal_length_x = 1691, center_x = 1914,
+             image_size_y = 2160, focal_length_y = 1697, center_y = 1073,
              skew = 0;
 
     // camera intrinsics matrix
     cv::Mat cam_mat = (Mat_<double>(3,3) <<  
-                               focal_length_x,           skew, image_size_x/2,
-                                            0, focal_length_y, image_size_y/2,
-                                            0,              0,              1);
+                               focal_length_x,           skew, center_x,
+                                            0, focal_length_y, center_y,
+                                            0,              0,        1);
+    
+    Matrix3d cam_mat_eigen;
+    cv::cv2eigen( cam_mat, cam_mat_eigen );
     
     //-- RANSAC --/////////////////////////////////////////////////////////////
     cv::Mat dist_coeffs; // distortion cooefficients vector; no distortion
-    
-    // frame00028.jpg -742016.091684 -5462219.213604 3198015.466386 0.684449 0.563692 0.383701 -0.257981
-    Quaterniond rot(0.684449, 0.563692, 0.383701, -0.257981);
-    Matrix3d rot_mat_eigen2;
-    rot_mat_eigen2 = rot.toRotationMatrix();
-    Matrix3d rot_mat_eigen = rot_mat_eigen2;//.transpose();
 
-    Vector3d tvec_eigen(-742016.091684, -5462219.213604, 3198015.466386);
+    // center of local ENU frame as expressed in ECEF ////////////////////////////////////////
+    Vector3d riG;
+    riG << -742015.2849821189, -5462219.4951718654, 3198014.4005017849;
+    // Recef2enu(riG) ////////////////////////////////////////////////////////////////////////
+    Matrix3d RIW;
+    RIW <<  0.990898837846252,        -0.134608666715581,                         0,
+            0.067888435292165,         0.499749186108091,          0.86350559427133,
+           -0.116235336746309,        -0.855646689837198,         0.504339259489203;
+    // camera correction /////////////////////////////////////////////////////////////////////
+    Matrix3d camCorrection;
+    camCorrection << 0.0, 1.0,  0.0,
+                     0.0, 0.0, -1.0,
+                    -1.0, 0.0,  0.0;
+    //////////////////////////////////////////////////////////////////////////////////////////
+
+    //camOrientationCorrection = rotationMatrix([1 0 0]',deg2rad(90))*rotationMatrix([0 0 1]',deg2rad(-90));
+    //dcm = camOrientationCorrection*(RIW*reshape(cam_rot_dcm(idx,:),[3 3])')';
+    
+    // frame00033.jpg -742016.795596 -5462219.117985 3198015.439822 0.779047 0.540520 0.289953 -0.129814
+    Quaterniond rot(0.779047, 0.540520, 0.289953, -0.129814);
+    Matrix3d rot_mat_eigen;
+    rot_mat_eigen = rot.toRotationMatrix().transpose();
+
+    Matrix3d rot_mat_corrected_eigen = camCorrection*((RIW*rot_mat_eigen.transpose()).transpose());
+
+    Vector3d tvec_eigen(-742016.795596, -5462219.117985, 3198015.439822);
+    tvec_eigen = RIW*(tvec_eigen - riG);
+    tvec_eigen = rot_mat_corrected_eigen*(-tvec_eigen);
 
     cv::Mat rot_mat;
     cv::Mat tvec;
-    eigen2cv(rot_mat_eigen, rot_mat);
+    eigen2cv(rot_mat_corrected_eigen, rot_mat);
     eigen2cv(tvec_eigen, tvec);
 
     // camera extrinsics
-    cv::Mat rvec;
+    //cv::Mat rvec;
     //cv::Mat tvec;
 
     //cv::solvePnPRansac( list_points3d_model_match, list_points2d_scene_match, cam_mat, dist_coeffs, rvec, tvec, false, 100, 8.0, 100 );
 
     //cv::Mat rot_mat;
-    cv::Rodrigues(rot_mat, rvec);
+    //cv::Rodrigues(rot_mat, rvec);
 
     std::cout << " DCM: " << rot_mat << std::endl;
     std::cout << "tvec: " << tvec    << std::endl;
@@ -250,13 +277,25 @@ int main( int argc, char** argv )
     cv::Mat proj_pos;
 
     // convert Eigen matrix of 3D point cloud to CV matrix
-    cv::Mat pos_mat_cv;
-    cv::eigen2cv( recon.pos_mat, pos_mat_cv );
+    //cv::Mat pos_mat_cv;
+    //cv::eigen2cv( recon.pos_mat, pos_mat_cv );
 
     // project 3D point cloud to 2D camera view
-    cv::projectPoints( pos_mat_cv, rvec, tvec, cam_mat, dist_coeffs, proj_pos );
+    //cv::projectPoints( pos_mat_cv, rvec, tvec, cam_mat, dist_coeffs, proj_pos );
 
+    MatrixXd proj_pos_eigen = recon.CamProjection(cam_mat_eigen, rot_mat_corrected_eigen, tvec_eigen);
+    
 
+    // convert to OpenCV image origin /////////////////////////////////////////
+    //proj_pos_eigen.col(1).rowwise() -= (double) image_size_y;
+
+    auto n = proj_pos_eigen.rows();
+    proj_pos_eigen.col(1) -= (double)(image_size_y)*VectorXd::Ones(n);
+    proj_pos_eigen.col(1) *= -1.0;
+
+    //writeEigenToCSV("projectionTest.csv", proj_pos_eigen);
+    cv::eigen2cv( proj_pos_eigen, proj_pos );
+    
     //-- directed search --////////////////////////////////////////////////////
 
     //-- match camera and map descriptors using FLANN matcher
@@ -280,7 +319,7 @@ int main( int argc, char** argv )
         cv::Mat descriptors_region_cam;
         cv::Mat descriptors_region_map;
 
-        descriptors_region_cam.push_back( descriptors_cam.row(i) );
+        descriptors_region_cam.push_back( descriptors_cam.row(i) ); // TODO CHECK ///////////////
 
         // check whether each projected map point is within viscinity of camera point
         for ( unsigned j = 0; j < proj_pos.rows; j++ )
@@ -572,3 +611,14 @@ vector<int> RegionQuery(std::vector<KeyPoint> *keypoints, KeyPoint *keypoint, fl
     }
     return ret_keys;
 }
+
+/**
+ * @function writeEigenToCSV
+ * @brief write an Eigen matrix to a CSV file
+ */
+void writeEigenToCSV(std::string name, MatrixXd matrix)
+{
+    const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
+    std::ofstream file(name.c_str());
+    file << matrix.format(CSVFormat);
+ }

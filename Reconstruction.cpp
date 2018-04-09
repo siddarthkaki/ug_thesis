@@ -38,6 +38,16 @@ void Reconstruction::Load()
     input_file.seekg(std::ios::beg);
     std::string curr_line;
 
+    // center of local ENU frame as expressed in ECEF ////////////////////////////////////////
+    Eigen::Vector3d riG;
+    riG << -742015.2849821189, -5462219.4951718654, 3198014.4005017849;
+    // Recef2enu(riG) ////////////////////////////////////////////////////////////////////////
+    Eigen::Matrix3d RIW;
+    RIW <<  0.990898837846252,        -0.134608666715581,                         0,
+            0.067888435292165,         0.499749186108091,          0.86350559427133,
+           -0.116235336746309,        -0.855646689837198,         0.504339259489203;
+    //////////////////////////////////////////////////////////////////////////////////////////
+    
     if ( input_file.is_open() )
     {
         unsigned ind_total_tracks = 0;
@@ -64,18 +74,23 @@ void Reconstruction::Load()
                         []( const std::string& val ) { return std::stod(val); } );
 
             unsigned curr_id = tokenised_double.at(0); // POINT3D_ID
+
+            Eigen::Vector3d currPos;
+            currPos << tokenised_double.at(1) - riG(0), tokenised_double.at(2) - riG(1), tokenised_double.at(3) - riG(2);
+            Eigen::Vector3d currPosRotated =  RIW*currPos;
             
-            pos_mat(i,0) = tokenised_double.at(1); // X pos
-            pos_mat(i,1) = tokenised_double.at(2); // Y pos
-            pos_mat(i,2) = tokenised_double.at(3); // Z pos
+            
+            pos_mat(i,0) = currPosRotated(0); // X pos
+            pos_mat(i,1) = currPosRotated(1); // Y pos
+            pos_mat(i,2) = currPosRotated(2); // Z pos
 
             unsigned num_tracks = (tokenised_double.size() - 8 - 9)/2; // number of images with this point
 
             // create new Point3D object
-            Point3D point_temp( tokenised_double.at(0),
-                                tokenised_double.at(1),
-                                tokenised_double.at(2),
-                                tokenised_double.at(3),
+            Point3D point_temp( curr_id,
+                                currPosRotated(0),
+                                currPosRotated(1),
+                                currPosRotated(2),
                                 num_tracks);
 
             //MatrixXi curr_descriptors(num_tracks,128); // matrix of descriptors for each point
@@ -219,4 +234,37 @@ unsigned Reconstruction::DescriptorCount(sqlite3 &db)
     }
     
     return count;
+}
+
+MatrixXd Reconstruction::CamProjection(MatrixXd KMat, Matrix3d RCI, Vector3d tVec)
+{
+
+    unsigned numPoints = pos_mat.rows();
+
+    MatrixXd xMat(numPoints, 2);
+
+    MatrixXd ExtMat(RCI.rows(), RCI.cols()+tVec.cols());
+    ExtMat << RCI, tVec;
+
+    std::cout << "ExtMat: " << ExtMat << std::endl;
+
+    MatrixXd PMat = KMat*ExtMat;
+
+    std::cout << "PMat: " << PMat << std::endl;
+
+    for (unsigned i = 0; i < numPoints; i++)
+    {
+        Eigen::Vector4d XHomoVec;
+        XHomoVec << pos_mat(i,0), pos_mat(i,1), pos_mat(i,2), 1;
+    
+        Eigen::Vector3d xHomoVec = PMat*XHomoVec;
+        
+        double x = xHomoVec(0) / xHomoVec(2);
+        double y = xHomoVec(1) / xHomoVec(2);
+
+        xMat(i,0) = x; xMat(i,1) = y;
+    }
+
+    return xMat;
+
 }

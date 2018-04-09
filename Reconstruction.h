@@ -20,6 +20,8 @@
 
 using Eigen::MatrixXd;
 using Eigen::MatrixXi;
+using Eigen::Matrix3d;
+using Eigen::Vector3d;
 
 class Reconstruction 
 { 
@@ -64,6 +66,7 @@ class Reconstruction
         Reconstruction Load(std::string file_name);
         void Save(std::string file_name, Reconstruction recon_obj);
         unsigned DescriptorCount(sqlite3 &db);
+        MatrixXd CamProjection(MatrixXd KMat, Matrix3d RCI, Vector3d tVec);
 
 };
 /*
