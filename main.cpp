@@ -14,6 +14,7 @@
 #include <sstream>
 #include <algorithm>
 #include <iterator>
+#include <numeric>
 #include <map>
 #include <eigen3/Eigen/Dense>
 #include <sqlite3.h>
@@ -204,37 +205,52 @@ int main( int argc, char** argv )
     proj_pos_eigen.col(1) -= (double)(image_size_y)*VectorXd::Ones(n);
     proj_pos_eigen.col(1) *= -1.0;
 
-    /*MatrixXd testVec(3,2);
-    testVec <<  1, 2,
-                3, 4,
-                5, 6;
-    std::cout << testVec << std::endl;
-    removeEigenRow(testVec, 0);
-    std::cout << testVec << std::endl;*/
-
     //-- Region cropping to image frame--//////////////////////////////////////
-    for( unsigned i = n-1; i > 0; i-- )
-    //for( unsigned i = 0; i < n; i++ )
+
+    std::vector<unsigned> visible_idx;
+    visible_idx.reserve(n);
+    for( unsigned i = 0; i < n; i++ )
     {
         double tempX = proj_pos_eigen(i,0);
         double tempY = proj_pos_eigen(i,1);
 
-        if( tempX < 0.0 || tempX > (double)(image_size_x) || tempY < 0.0 || tempY > (double)(image_size_y) )
+        if( tempX >= 0.0 && tempX <= (double)(image_size_x) && tempY >= 0.0 && tempY <= (double)(image_size_y) )
         {
-            removeMatrixXdRow(proj_pos_eigen, i);
-            removeMatrixXiRow(descriptors_map_eigen, i);
-            keypoints_cam.pop_back();
+            visible_idx.push_back(1);
+        }
+        else
+        {
+            visible_idx.push_back(0);
+        }
+    }
+
+    unsigned num_visible_features = std::accumulate(visible_idx.begin(), visible_idx.end(), 0);
+
+    MatrixXd proj_pos_visible_eigen(num_visible_features,2);
+    MatrixXi descriptors_map_visible_eigen(num_visible_features,128);
+    //std::vector<cv::KeyPoint> keypoints_cam_visible;
+    //keypoints_cam_visible.reserve(num_visible_features);
+
+    unsigned ii = 0;
+    for( unsigned i = 0; i < n; i++ )
+    {
+        if( visible_idx.at(i) == 1 )
+        {
+            proj_pos_visible_eigen.row(ii) = proj_pos_eigen.row(i);
+            descriptors_map_visible_eigen.row(ii) = descriptors_map_eigen.row(i);
+            //keypoints_cam_visible.push_back(keypoints_cam.at(i));
+            ++ii;
         }
     }
 
     //writeEigenToCSV("projectionTest.csv", proj_pos_eigen);
-    cv::eigen2cv( proj_pos_eigen, proj_pos );
+    cv::eigen2cv( proj_pos_visible_eigen, proj_pos );
 
     //-- feature correlation --////////////////////////////////////////////////
 
     // convert Eigen matrix of descriptors to CV matrix
     cv::Mat descriptors_map;
-    eigen2cv(descriptors_map_eigen, descriptors_map);
+    eigen2cv(descriptors_map_visible_eigen, descriptors_map);
 
     // output number of descriptors
     std::cout << "COLMAP Cam SIFT Size: " << descriptors_cam.size() << std::endl;
