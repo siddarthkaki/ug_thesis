@@ -246,7 +246,12 @@ int main( int argc, char** argv )
     //writeEigenToCSV("projectionTest.csv", proj_pos_eigen);
     cv::eigen2cv( proj_pos_visible_eigen, proj_pos );
 
+    
+    
     //-- feature correlation --////////////////////////////////////////////////
+
+    // start clock
+    t = clock();
 
     // convert Eigen matrix of descriptors to CV matrix
     cv::Mat descriptors_map;
@@ -262,9 +267,74 @@ int main( int argc, char** argv )
     if( descriptors_map.type() != CV_32F )
     { descriptors_map.convertTo(descriptors_map, CV_32F); }
 
-    // start clock
-    t = clock();
+    //-- directed search --////////////////////////////////////////////////////
 
+    //-- match camera and map descriptors using FLANN matcher
+    FlannBasedMatcher matcherDS;
+
+    std::vector<cv::DMatch> ratio_matchesDS;
+    std::vector<cv::DMatch> ratio_failuresDS;
+    std::vector<cv::KeyPoint> obj_keypts;
+    std::vector<cv::KeyPoint> matched_keypts;
+
+    // loop through each camera image point
+    for ( unsigned i = 0; i < keypoints_cam.size(); i++ )
+    {
+        std::vector<std::vector<cv::DMatch>> matchesDS;
+
+        // extract pixel coordinates
+        float cam_x = keypoints_cam.at(i).pt.x;
+        float cam_y = keypoints_cam.at(i).pt.y;
+
+        std::vector<unsigned> map_region_idx;
+        cv::Mat descriptors_region_cam;
+        cv::Mat descriptors_region_map;
+
+        descriptors_region_cam.push_back( descriptors_cam.row(i) );
+
+        // check whether each projected map point is within viscinity of camera point
+        for ( unsigned j = 0; j < proj_pos.rows; j++ )
+        {
+            float map_x = proj_pos.at<float>(j,0);
+            float map_y = proj_pos.at<float>(j,1);
+
+            float dist = sqrt( pow((cam_x - map_x),2) + pow((cam_y - map_y),2) );
+            float eps = 0.15*image_size_x;
+
+            if( dist <= eps && dist > 0.0f )
+            {
+                map_region_idx.push_back(j);
+                descriptors_region_map.push_back( descriptors_map.row(j) );
+            }
+        }
+
+        if ( !descriptors_region_map.empty() && descriptors_region_map.rows >= 2 )
+        {
+            // find 2 best matches for each descriptor; latter is for ratio test
+            matcherDS.knnMatch(descriptors_region_cam, descriptors_region_map, matchesDS, 2);
+
+            //-- second neighbor ratio test
+            for ( unsigned k = 0; k < matchesDS.size(); k++ )
+            {
+                if ( matchesDS[k][0].distance < matchesDS[k][1].distance * 0.9 )
+                {
+                    ratio_matchesDS.push_back( matchesDS[k][0] );
+                    matched_keypts.push_back( keypoints_cam.at(i) );
+                }
+                else
+                {
+                    ratio_failuresDS.push_back( matchesDS[k][0] );
+                    obj_keypts.push_back( keypoints_cam.at(i) );
+                }
+            }
+        }
+        else { obj_keypts.push_back( keypoints_cam.at(i) ); }
+    }
+
+
+
+
+    /*
     //-- match camera and map descriptors using FLANN matcher
     FlannBasedMatcher matcher;
 
@@ -296,29 +366,34 @@ int main( int argc, char** argv )
     printf("-- Max dist : %f \n", max_dist );
     printf("-- Min dist : %f \n", min_dist );
 
-    std::vector<DMatch> good_matches = ratio_matches;
-    std::vector<DMatch>  bad_matches = ratio_failures;
+    */
+
+
+    std::vector<cv::DMatch> good_matches = ratio_matchesDS;
+    std::vector<cv::DMatch>  bad_matches = ratio_failuresDS;
 
     //-- find matched keypoints
     //std::vector<KeyPoint> obj_keypts = keypoints_cam; // keypoints of changed object / umnatched keypoints
-    std::vector<KeyPoint> matched_keypts; // keypoints of matched objects
+    //std::vector<KeyPoint> matched_keypts; // keypoints of matched objects
     
     std::vector<Point2f> list_points2d_scene_match; // container for the model 2D coordinates found in the scene
     std::vector<Point3f> list_points3d_model_match; // container for the model 3D coordinates found in the scene
 
+/*
     for( int i = good_matches.size()-1; i >= 0; i-- )
     {
-        float xf = recon.points.at(good_matches[i].trainIdx).x;
-        float yf = recon.points.at(good_matches[i].trainIdx).y;
-        float zf = recon.points.at(good_matches[i].trainIdx).z;
-        Point3f point3d_model( xf, yf, zf ); // 3D point from model
-        Point2f point2d_scene = keypoints_cam[ good_matches[i].queryIdx ].pt;  // 2D point from the scene
-        list_points3d_model_match.push_back( point3d_model ); // add 3D point
-        list_points2d_scene_match.push_back( point2d_scene ); // add 2D point
+        // float xf = recon.points.at(good_matches[i].trainIdx).x;
+        // float yf = recon.points.at(good_matches[i].trainIdx).y;
+        // float zf = recon.points.at(good_matches[i].trainIdx).z;
+        // Point3f point3d_model( xf, yf, zf ); // 3D point from model
+        // Point2f point2d_scene = keypoints_cam[ good_matches[i].queryIdx ].pt;  // 2D point from the scene
+        // list_points3d_model_match.push_back( point3d_model ); // add 3D point
+        // list_points2d_scene_match.push_back( point2d_scene ); // add 2D point
 
-        matched_keypts.push_back( keypoints_cam[ good_matches[i].queryIdx ] );
+        //matched_keypts.push_back( keypoints_cam[ good_matches[i].queryIdx ] );
         //obj_keypts.erase( obj_keypts.begin() + good_matches[i].queryIdx );
     }
+*/
 
     //-- debug output
     //printf("\n----Total Keypoints : %lu\n", keypoints_cam.size());
@@ -326,72 +401,10 @@ int main( int argc, char** argv )
     //printf("---Object Keypoints : %lu\n\n", obj_keypts.size());
     
 
-    //-- directed search --////////////////////////////////////////////////////
-
-    //-- match camera and map descriptors using FLANN matcher
-    FlannBasedMatcher matcher2;
-
-    std::vector<cv::DMatch> ratio_matches2;
-    std::vector<cv::DMatch> ratio_failures2;
-    std::vector<cv::KeyPoint> obj_keypts;
-
-
-    // loop through each camera image point
-    for ( unsigned i = 0; i < keypoints_cam.size(); i++ )
-    {
-        std::vector<std::vector<cv::DMatch>> matches2;
-
-        // extract pixel coordinates
-        float cam_x = keypoints_cam.at(i).pt.x;
-        float cam_y = keypoints_cam.at(i).pt.y;
-
-        std::vector<unsigned> map_region_idx;
-        cv::Mat descriptors_region_cam;
-        cv::Mat descriptors_region_map;
-
-        descriptors_region_cam.push_back( descriptors_cam.row(i) );
-
-        // check whether each projected map point is within viscinity of camera point
-        for ( unsigned j = 0; j < proj_pos.rows; j++ )
-        {
-            float map_x = proj_pos.at<float>(j,0);
-            float map_y = proj_pos.at<float>(j,1);
-
-            float dist = sqrt( pow((cam_x - map_x),2) + pow((cam_y - map_y),2) );
-            float eps = 0.1*image_size_x;
-
-            if( dist <= eps && dist != 0.0f )
-            {
-                map_region_idx.push_back(j);
-                descriptors_region_map.push_back( descriptors_map.row(j) );
-            }
-        }
-
-        if ( !descriptors_region_map.empty() && descriptors_region_map.rows >= 2 )
-        {
-            // find 2 best matches for each descriptor; latter is for ratio test
-            matcher2.knnMatch(descriptors_region_cam, descriptors_region_map, matches2, 2);
-
-            //-- second neighbor ratio test
-            for ( unsigned k = 0; k < matches2.size(); k++ )
-            {
-                if ( matches2[k][0].distance < matches2[k][1].distance * 0.9 )
-                {
-                    ratio_matches2.push_back( matches2[k][0] );
-                }
-                else
-                {
-                    ratio_failures2.push_back( matches2[k][0] );
-                    obj_keypts.push_back( keypoints_cam.at(i) );    
-                }
-            }
-        }
-        else { obj_keypts.push_back( keypoints_cam.at(i) ); }
-    }
 
     //-- debug output
     printf("\n----Total Keypoints : %lu\n", keypoints_cam.size());
-    printf("--Matched Keypoints : %lu\n", keypoints_cam.size() - obj_keypts.size());
+    printf("--Matched Keypoints : %lu\n", matched_keypts.size());
     printf("---Object Keypoints : %lu\n\n", obj_keypts.size());
 
     // stop clock

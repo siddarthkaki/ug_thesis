@@ -43,7 +43,7 @@ end
 %% filter down to close by points
 pointsNew = [];
 for i = 1:length(points),
-    if norm(points(i,:)) < 1.5,
+    if norm(points(i,:)) < 5,
         pointsNew = [pointsNew; points(i,:)];
     end
 end

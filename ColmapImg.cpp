@@ -21,7 +21,7 @@ void ColmapImg::ColmapSiftFeatures()
     std::string sys_call = "cp " + cm_image_path + " .temp_img/";
     system(sys_call.c_str());
     //std::cout << cm_database_path << std::endl;
-    std::string cm_sys_call = "colmap feature_extractor --database_path " + cm_database_path + " --image_path .temp_img --SiftExtraction.max_num_features 500 --SiftExtraction.use_gpu 0";
+    std::string cm_sys_call = "colmap feature_extractor --database_path " + cm_database_path + " --image_path .temp_img --SiftExtraction.max_num_features 2000 --SiftExtraction.use_gpu 0";
     std::cout << cm_sys_call << std::endl;
     int cm_sys_res = system(cm_sys_call.c_str());
 }

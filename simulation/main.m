@@ -40,7 +40,6 @@ hold on
 title('Prior Map')
 
 %% generate new object keypoints and descriptors
-
 objL = 1; % m
 cg = -(mapL-objL) + rand(1,3)*(2*(mapL-objL));
 objNumPoints = 100;
