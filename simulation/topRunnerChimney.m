@@ -3,6 +3,9 @@
 %% housekeeping
 clear all; close all; clc;
 
+%% config
+savePlots = true;
+
 %% read in 3D points
 pc_file_id = fullfile(pwd, '../data/global_map_chimney/sparse/0/points3D.txt');
 fid = fopen(pc_file_id);
@@ -69,7 +72,8 @@ objL = 0.25; % m
 mapL = 2.5; % m
 cg = [0 -.75 -0.75];%-(mapL-objL) + rand(1,3)*(2*(mapL-objL));
 cg = [0 0 0.25];
-objNumPoints = 100;
+cg = [-0.6 0.25 -0.75];
+objNumPoints = 500;
 
 [objKeypoints,objDescriptors] = generateSphere(objL,cg,objNumPoints);
 
@@ -77,9 +81,9 @@ objX = objKeypoints(:,1);
 objY = objKeypoints(:,2);
 objZ = objKeypoints(:,3);
 
-figure,
-subplot(1,2,1)
-scatter3(mapX,mapY,mapZ)
+figure(1)
+%subplot(1,2,1)
+s1 = scatter3(mapX,mapY,mapZ,'.');
 axis equal
 xlabel('X (m)')
 ylabel('Y (m)')
@@ -87,23 +91,41 @@ zlabel('Z (m)')
 grid on
 hold on
 title('Prior Map')
+s1.LineWidth = 0.1;
+s1.MarkerEdgeColor = 'b';
+configPlot;
+% set(gca,'Color',[0.9 0.9 0.9])
+% set(gca, 'XColor', 'k')
+% set(gca,'FontSize',14)
+% set(gcf, 'InvertHardcopy', 'off')
+% set(gcf, 'Position', [0, 0, 1000, 1000])
+if savePlots, print('fig_pc_prior_map','-dpng'); end
+% s1.MarkerFaceColor = [0 0.5 0.5];
 
-subplot(1,2,2)
-scatter3(mapX,mapY,mapZ)
+figure(2)
+%subplot(1,2,2)
+s2 = scatter3(mapX,mapY,mapZ,'.');
 axis equal
 xlabel('X (m)')
 ylabel('Y (m)')
 zlabel('Z (m)')
 grid on
 hold on
-scatter3(objX,objY,objZ,'r')
+s22 = scatter3(objX,objY,objZ,'r+');
 title('Environment with New Object')
+s2.LineWidth = 0.1;
+s2.MarkerEdgeColor = 'b';
+s22.LineWidth = 0.1;
+s22.MarkerEdgeColor = 'r';
+configPlot;
+if savePlots, print('fig_pc_environ_new_object','-dpng'); end
+%s2.MarkerFaceColor = [0.5 0 0];
 
 %% insert object into environment
 
 % simulate extraneous features
 extL = distanceThreshold;%5; % m
-extNumPoints = 250;
+extNumPoints = 5000;
 extKeypoints = -extL + rand(extNumPoints,3)*(2*extL);
 extDescriptors = randi([0,128],[extNumPoints,128]);
 
@@ -111,10 +133,20 @@ extDescriptors = randi([0,128],[extNumPoints,128]);
 sceneKeypoints = [mapKeypoints; objKeypoints; extKeypoints];
 sceneDescriptors = [mapDescriptors; objDescriptors; extDescriptors];
 
+%% delete random feature points
+k = randperm(size(sceneKeypoints,1));
+%Ex_Ran = X;
+deleteNumPoints = 17500;
+sceneKeypoints(k(1:deleteNumPoints),:) = [];
+sceneDescriptors(k(1:deleteNumPoints),:) = [];
+
 scnX = sceneKeypoints(:,1);
 scnY = sceneKeypoints(:,2);
 scnZ = sceneKeypoints(:,3);
 
+%% add noise to feature point positions
+fudgeFactor = 0.02; % meters, variance
+sceneKeypoints = sceneKeypoints + fudgeFactor*randn(size(sceneKeypoints));
 
 %% projection
 
@@ -159,7 +191,7 @@ projectedMap(:,1) = projectedMap(:,1);% + image_size_x/2;
 projectedMap(:,2) = projectedMap(:,2);% - image_size_y;
 
 %% simulate descriptor noise
-mag = 10;
+mag = 25;
 projectedDescriptors = projectedDescriptors + randi([-mag,mag], size(projectedDescriptors));
 
 %% feature matching
@@ -174,9 +206,9 @@ else
 end
 
 %% visualise object localisation
-figure,
-subplot(1,2,1)
-scatter(projectedMap(:,1),projectedMap(:,2));%,20,projected(:,3:5),'fill')
+figure(3)
+%subplot(1,2,1)
+s3 = scatter(projectedMap(:,1),projectedMap(:,2),'.');%,20,projected(:,3:5),'fill')
 axis equal
 grid on
 title('Map Projection')
@@ -184,9 +216,12 @@ xlabel('X (pixels)')
 ylabel('Y (pixels)')
 xlim([0 image_size_x])
 ylim([0 image_size_y])
+configPlot;
+if savePlots, print('fig_projected_map','-dpng'); end
 
-subplot(1,2,2)
-scatter(projected(:,1),projected(:,2));%,20,projected(:,3:5),'fill')
+figure(4)
+%subplot(1,2,2)
+s4 = scatter(projected(:,1),projected(:,2),'.');%,20,projected(:,3:5),'fill')
 axis equal
 grid on
 title('Simulated Camera View')
@@ -194,41 +229,50 @@ xlabel('X (pixels)')
 ylabel('Y (pixels)')
 xlim([0 image_size_x])
 ylim([0 image_size_y])
+configPlot;
+if savePlots, print('fig_sim_camera_view','-dpng'); end
 
-figure,
-subplot(1,2,1)
-scatter(projectedMap(:,1),projectedMap(:,2));%,20,projected(:,3:5),'fill')
-axis equal
-grid on
-title('Map Projection')
-xlabel('X (pixels)')
-ylabel('Y (pixels)')
-xlim([0 image_size_x])
-ylim([0 image_size_y])
 
-subplot(1,2,2)
-scatter(projected(:,1),projected(:,2));%,20,projected(:,3:5),'fill')
+% figure,
+% %subplot(1,2,1)
+% scatter(projectedMap(:,1),projectedMap(:,2));%,20,projected(:,3:5),'fill')
+% axis equal
+% grid on
+% title('Map Projection')
+% xlabel('X (pixels)')
+% ylabel('Y (pixels)')
+% xlim([0 image_size_x])
+% ylim([0 image_size_y])
+
+figure(5)
+%subplot(1,2,2)
+s5 = scatter(projected(:,1),projected(:,2),'.');%,20,projected(:,3:5),'fill')
 axis equal
 grid on
 title('Simulated Camera View with Deltas')
 xlabel('X (pixels)')
 ylabel('Y (pixels)')
 hold on
-scatter(isolated(:,1),isolated(:,2),'r');
+s55 = scatter(isolated(:,1),isolated(:,2),'r+');
 xlim([0 image_size_x])
 ylim([0 image_size_y])
+configPlot;
+if savePlots, print('fig_sim_camera_view_deltas','-dpng'); end
+
 
 %% dbscan clustering
 addpath dbscan
-epsilon = 0.2;
-MinPts = 15;
+epsilon = 0.15;
+MinPts = 50;
 IDX = DBSCAN(isolated/1000,epsilon,MinPts);
 PlotClusterinResult(isolated/1000, IDX);
-xlabel('X (megapixels)')
-ylabel('Y (megapixels)')
+xlabel('X (kilopixels)')
+ylabel('Y (kilopixels)')
 xlim([0,image_size_x/1000]);
 ylim([0,image_size_y/1000]);
 title(['DBSCAN Clustering (\epsilon = ' num2str(epsilon) ', MinPts = ' num2str(MinPts) ')']);
+configPlot;
+if savePlots, print('fig_dbscan','-dpng'); end
 rmpath dbscan
 
 %%
@@ -263,27 +307,27 @@ rmpath dbscan
 % zlabel('z (m) up')
 
 %%
-figure,
-subplot(1,2,1)
-scatter3(mapKeypoints(:,1),mapKeypoints(:,2),mapKeypoints(:,3));%,20,points(:,4:6),'fill')
-axis equal
-title('Original Points')
-xlabel('x (m) east')
-ylabel('y (m) north')
-zlabel('z (m) up')
-hold on
-RCI = reshape(cam_rot_dcm(idx,:),[3 3]);
-posTemp = cam_pos(idx,:)';
-uVecTemp = RIW*RCI'*[1 0 0]';
-quiver3(posTemp(1), posTemp(2), posTemp(3), uVecTemp(1), uVecTemp(2), uVecTemp(3),'r');
-
-subplot(1,2,2)
-scatter(projected(:,1),projected(:,2));%,20,projected(:,3:5),'fill')
-axis equal
-grid on
-title('Points projected with camera model')
-xlim([-image_size_x/2 image_size_x/2])
-ylim([-image_size_y/2 image_size_y/2])
-
-xlim([0 image_size_x])
-ylim([0 image_size_y])
+% figure,
+% subplot(1,2,1)
+% scatter3(mapKeypoints(:,1),mapKeypoints(:,2),mapKeypoints(:,3));%,20,points(:,4:6),'fill')
+% axis equal
+% title('Original Points')
+% xlabel('x (m) east')
+% ylabel('y (m) north')
+% zlabel('z (m) up')
+% hold on
+% RCI = reshape(cam_rot_dcm(idx,:),[3 3]);
+% posTemp = cam_pos(idx,:)';
+% uVecTemp = RIW*RCI'*[1 0 0]';
+% quiver3(posTemp(1), posTemp(2), posTemp(3), uVecTemp(1), uVecTemp(2), uVecTemp(3),'r');
+% 
+% subplot(1,2,2)
+% scatter(projected(:,1),projected(:,2));%,20,projected(:,3:5),'fill')
+% axis equal
+% grid on
+% title('Points projected with camera model')
+% xlim([-image_size_x/2 image_size_x/2])
+% ylim([-image_size_y/2 image_size_y/2])
+% 
+% xlim([0 image_size_x])
+% ylim([0 image_size_y])

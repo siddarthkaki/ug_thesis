@@ -16,6 +16,8 @@ function PlotClusterinResult(X, IDX)
     figure,
 
     k=max(IDX);
+    
+    pixPos = [];
 
     Colors=hsv(k);
 
@@ -27,6 +29,10 @@ function PlotClusterinResult(X, IDX)
             MarkerSize = 8;
             Color = Colors(i,:);
             Legends{end+1} = ['Cluster #' num2str(i)];
+            
+            pixPos = [pixPos; Xi];
+            center = mean(pixPos,1);
+            fprintf('\nCenter: %f %f pixels\n', center(1)*1000, center(2)*1000);
         else
             Style = 'o';
             MarkerSize = 6;

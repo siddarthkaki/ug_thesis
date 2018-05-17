@@ -10,7 +10,7 @@ function [xMat, valid] = camProjection(XMat, KMat, RCI, tVec)
     xMat = zeros(numPoints,2);
     valid = false(numPoints,1);
     
-    PMat = KMat*[RCI, tVec];
+    PMat = KMat*[RCI, tVec]
     
     for i = 1:numPoints,
         
